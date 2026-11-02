@@ -190,6 +190,10 @@ Get a review from the whole team before you merge them.
   `Float`s, only to draw it. A bug here shows a wrong picture; it does not change a verdict.
 - **The web server** in `app/Main.lean` (`kapla serve`). It runs the physics check and the
   scorer again on every plan it shows, so a file or a planner cannot make a plan look safe.
+  For a gallery plan that the check with placement errors refuses, it also runs the check at the
+  planned positions (`checkTurnedPlan`, proved by `checkTurnedPlan_sound`) in the background, and
+  shows "Stands as planned (not checked for errors)" if it passes. `coreCheck_ok_sound` does not
+  cover this path: the server combines the two checks itself.
 - Not trusted, by design: **Claude** (chat and `ai` planners). Its answers are only proposals.
 - **The physics model** (`spec/physics-rules.md`), most of all: planks are rigid and all the
   same (B1–B3); pushes at the corners of a patch can stand in for any spread-out push (F4);

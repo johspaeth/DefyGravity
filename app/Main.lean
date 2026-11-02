@@ -516,6 +516,72 @@ scorer take up to a few seconds on a big plan, so `kapla serve` runs them once p
 has a new hash, so it is checked again. -/
 abbrev ProposalCache := IO.Ref (Std.HashMap UInt64 Json)
 
+/-- The check at the planned positions, for a plan that the robust check refused:
+`checkTurnedPlan` (`checkTurnedPlan_sound`: at most `maxBlocks` blocks, and after every block the build
+is well-formed and stable at the planned positions). It applies when every block is turned by a 15°
+step (a straight block is turned by 0° or 90°) and every step has 1 to `hands` blocks; `none` when it
+does not apply. It can take minutes on a big plan, so the server runs it in the background. -/
+def plannedPositionsCheck (maxBlocks : Nat) (plan : BuildPlan) : Option Bool := do
+  unless (KaplaPhysics.stepDiagnostics HumanModel.default plan).isEmpty do none
+  let tb ← KaplaPhysics.turnedBuildOf plan.blocks
+  return KaplaPhysics.checkTurnedPlan maxBlocks tb
+
+/-- An upright with a flat block on top: refused by the robust check (it certifies nothing that rests
+on a 1-unit face), well-formed and stable at the planned positions. -/
+def uprightWithTop : String :=
+  "{\"steps\":[{\"blocks\":[{\"up\":\"upright\",\"center\":[0,0,\"15/2\"]}]}," ++
+  "{\"blocks\":[{\"up\":\"flat\",\"center\":[0,0,\"31/2\"]}]}]}"
+
+#guard match readBuildPlan uprightWithTop with
+  | .ok plan => !(runPhysics {} 200 plan).ok && plannedPositionsCheck 200 plan == some true
+  | .error _ => false
+-- A flat block that floats is refused at the planned positions too.
+#guard match readBuildPlan "{\"steps\":[{\"blocks\":[{\"up\":\"flat\",\"center\":[0,0,\"3/2\"]}]}]}" with
+  | .ok plan => plannedPositionsCheck 200 plan == some false
+  | .error _ => false
+
+/-- Where the background check of an entry is: running, or done with the answer of
+`plannedPositionsCheck`. -/
+inductive SlowCheck where
+  | running
+  | done (result : Option Bool)
+
+/-- The background checks of gallery entries, found by the hash of the file's text. -/
+abbrev SlowCache := IO.Ref (Std.HashMap UInt64 SlowCheck)
+
+/-- The words for a plan that stands at the planned positions but was not shown to stand with
+placement errors. -/
+def plannedOnlyLine : String :=
+  "Physics (verified): well-formed and stands after every block, at the planned positions only (not shown to stand with 3.9 mm placement errors; gaps and reach not checked)"
+
+/-- Add what the background check says to a `proposal` answer. A plan that the robust check accepted,
+or that has a block turned by a 15° step that is not a quarter turn (the engine already checked it at
+the planned positions), is left as it is. With `start`, a check that has not run yet starts now. -/
+def withSlowCheck (slow : SlowCache) (start : Bool) (text : String) (e : Entry) (j : Json) : IO Json := do
+  let some p := e.proposal | return j
+  if (j.getObjValAs? Bool "stands").toOption == some true || hasTurnedBlocks p.plan then return j
+  let key := hash text
+  let lines := ((j.getObjValAs? (Array Json) "physics").toOption.getD #[])
+  match (← slow.get)[key]? with
+  | some (.done (some true)) =>
+    return (j.setObjVal! "stands" (Json.bool true)).setObjVal! "assurance" (Json.str "nominal")
+      |>.setObjVal! "physics" (Json.arr #[Json.str plannedOnlyLine])
+  | some (.done (some false)) =>
+    return j.setObjVal! "physics" (Json.arr (lines.push (Json.str "Also not shown to stand at the planned positions")))
+  | some (.done none) => return j
+  | some .running => return checking j lines
+  | none =>
+    unless start do return j
+    slow.modify (·.insert key .running)
+    let _ ← IO.asTask (prio := .dedicated) do
+      let r := plannedPositionsCheck p.blocks p.plan
+      slow.modify (·.insert key (.done r))
+    return checking j lines
+where
+  checking (j : Json) (lines : Array Json) : Json :=
+    (j.setObjVal! "checking" (Json.bool true)).setObjVal! "physics"
+      (Json.arr (#[Json.str "Checking every step at the planned positions, in the background. This can take minutes."] ++ lines))
+
 /-- The `proposal` of an entry (null if it has no plan): from the cache, or computed and kept. -/
 def entryProposal (cache : ProposalCache) (text : String) (e : Entry) : IO Json := do
   match e.proposal with
@@ -542,11 +608,12 @@ def checkGallery (cache : ProposalCache) : IO Unit := do
   IO.println s!"Checked the gallery in {(← IO.monoMsNow) - start} ms."
 
 /-- `GET /gallery/NAME`: `name`, `model`, and `proposal` (null if the entry has no plan). -/
-def getEntry (cache : ProposalCache) (name : String) : IO Reply := do
+def getEntry (cache : ProposalCache) (slow : SlowCache) (name : String) : IO Reply := do
   match ← loadEntryText name with
   | .error r => return r
   | .ok (text, e) =>
-    let proposal ← entryProposal cache text e
+    -- the robust check runs at startup; the check at the planned positions starts on first open
+    let proposal ← withSlowCheck slow true text e (← entryProposal cache text e)
     return { json := (Json.mkObj [("name", Json.str name), ("model", KaplaSemantics.modelToJson e.model),
                                   ("proposal", proposal)]).compress }
 
@@ -764,11 +831,13 @@ section Server
 open Std Async
 open Std Http Server
 
-/-- The website: its port, the API key if there is one, and the checked gallery entries. -/
+/-- The website: its port, the API key if there is one, the checked gallery entries, and the
+background checks at the planned positions. -/
 structure Site where
   port : Nat
   key : Option String
   cache : ProposalCache
+  slow : SlowCache
 
 /-- Send a reply as JSON. A browser must not keep an old list of models. -/
 def sendJson (r : Reply) : ContextAsync (Response Body.Any) :=
@@ -812,7 +881,7 @@ instance : Handler Site where
     else if method == .post && path.startsWith "/gallery/" && path.endsWith "/pr" then
       guarded (postPullRequest ((path.drop "/gallery/".length).dropEnd "/pr".length).toString)
     else if method == .get && path.startsWith "/gallery/" then
-      guarded (getEntry site.cache (path.drop "/gallery/".length).toString)
+      guarded (getEntry site.cache site.slow (path.drop "/gallery/".length).toString)
     else if method == .post && path == "/gallery" then
       try
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
@@ -832,11 +901,12 @@ def serve (port : Nat) : IO UInt32 := do
   if key.isNone then
     IO.println "No API key in .env or in ANTHROPIC_API_KEY, so the chat will not work. The rest of the site does."
   let cache ← IO.mkRef {}
+  let slow ← IO.mkRef {}
   checkGallery cache
   try
     Async.block do
       let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, port.toUInt16⟩
-      let server ← Server.serve addr (Site.mk port key cache)
+      let server ← Server.serve addr (Site.mk port key cache slow)
       IO.println s!"Defy Gravity is running. Open http://localhost:{port}"
       (← IO.getStdout).flush
       server.waitShutdown

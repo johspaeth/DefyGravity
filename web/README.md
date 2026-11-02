@@ -49,7 +49,7 @@ Requests between the page and the server. Every answer is JSON, and a failure ha
 |---|---|---|
 | `GET /` | | The page (HTML) |
 | `GET /gallery` | | `{"entries": ["bunny", "egg"]}` |
-| `GET /gallery/NAME` | | `{"name", "model", "proposal"}`: `proposal` is null with no plan, else as in `POST /plan`. 404 if there is none, 422 if the file is not a good entry |
+| `GET /gallery/NAME` | | `{"name", "model", "proposal"}`: `proposal` is null with no plan, else as in `POST /plan`. If the check with placement errors refused the plan, the first `GET` starts the check at the planned positions in the background (`checkTurnedPlan`; it can take minutes on a big plan): until it is done, `proposal` has `"checking": true`, and the page asks again every 5 s. Then a plan that passes has `stands` true and `assurance` `"nominal"`. 404 if there is none, 422 if the file is not a good entry |
 | `GET /status` | | `{"key": true or false}`: does the server have an API key? |
 | `POST /chat` | `{"text": newest message, "messages": [{"role": "user" or "assistant", "text": text}], "model": model on screen or null}` | `{"reply": text, "model": new model, or null if Claude only answered}`. 503 with no key, 502 if Claude failed |
 | `GET /planners` | | `{"planners": [names], "claude": [names]}`, from `KaplaPlanner.strategies`. The `claude` ones ask Claude and take an `effort` |

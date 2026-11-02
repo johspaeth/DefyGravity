@@ -90,7 +90,17 @@ def siteJs : String := "
       clearProposal(); const model = r.body.model;
       if (!KaplaViewer.show(model)) { setOpen(null, null); return; }
       setOpen(name, model); if (r.body.proposal) showProposal(model, r.body.proposal);
+      if (r.body.proposal && r.body.proposal.checking) pollChecking(name, mine);
     } catch (_) { if (mine === opening) say(noServer, true); } };
+  // The server checks a plan at the planned positions in the background (it can take minutes) when the
+  // check with placement errors refused it. Ask again every 5 s until the answer is there.
+  const pollChecking = (name, mine) => setTimeout(async () => {
+    if (mine !== opening || openName !== name) return;
+    if (busy) { pollChecking(name, mine); return; }
+    try { const r = await send('/gallery/' + encodeURIComponent(name));
+      if (mine !== opening || openName !== name || !r.ok || !r.body.proposal) return;
+      if (r.body.proposal.checking) pollChecking(name, mine); else showProposal(current, r.body.proposal);
+    } catch (_) { pollChecking(name, mine); } }, 5000);
   const save = async (name, overwrite, model, saved) => { hideAsk(); say('Saving...');
     try { const r = await send('/gallery', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({name, overwrite, model, proposal: saved})});
@@ -155,7 +165,7 @@ def siteJs : String := "
     proposalHeight = KaplaViewer.readNumber(score.height);
     KaplaViewer.showPlan(model, proposalHeight, p.view);
     badges.textContent = '';
-    badges.append(!p.stands ? badge('Does not stand', 'bad') : p.assurance === 'robust' ? badge('Stands, even 3.9 mm off', 'ok') : badge('Stands as planned (not checked for errors)', 'warn'));
+    badges.append(p.checking ? badge('Checking at the planned positions…', 'warn') : !p.stands ? badge('Does not stand', 'bad') : p.assurance === 'robust' ? badge('Stands, even 3.9 mm off', 'ok') : badge('Stands as planned (not checked for errors)', 'warn'));
     if (p.hardToReach) badges.append(badge('May be hard to reach', 'warn'));
     badges.append(badge(score.accepted ? 'Accepted' : 'Not accepted', score.accepted ? 'ok' : 'bad'));
     scores.textContent = `Score ${score.scoreRounded} (${score.verdict}). Height ${(+proposalHeight.toFixed(2))} blocks, ${score.blockCount} blocks used. Target cells with no block: ${score.missing}. Block cells outside the target: ${score.extra}.`;
