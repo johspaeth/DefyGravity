@@ -36,10 +36,16 @@ must keep a gap.
 
 A plan with turned blocks (B6) is checked at the planned positions only, and the report
 says so (`assurance := .nominal`). `--robust-only` refuses such plans.
+
+Rules for `check`, `view` and `plan` (`KaplaCore.BuildRules`): `--tolerance Q` sets the placement
+error each block may have, in block units (default `1/2`, 3.9 mm; from 0 to 1), `--hands N` the
+blocks one step may place (1 or 2), and `--rules FILE.json` adds a person's own rules (format:
+`planner/KaplaPlanner/RuleText.lean`). The planner gets a physics engine that checks these rules
+(`KaplaPhysics.engineFor`), and the checks after it use them too.
 -/
 
 open Lean (Json JsonNumber)
-open KaplaCore (Q Q3 Rot Upright BuildPlan HumanModel PhysicsReport Diagnostic)
+open KaplaCore (Q Q3 Rot Upright BuildPlan HumanModel PhysicsReport Diagnostic BuildRules)
 
 /-! ## Reading a blueprint exactly
 
@@ -151,29 +157,37 @@ def nearContact : String :=
 /-! ## From the AI planner to a safe plan -/
 
 /-- End to end: when the planner's `ai` strategy passes a design, checked with the real
-physics engine, the design's plan is one the engine accepts, so `coreCheck_ok_sound` holds
-for it: either a safe plan under placement errors up to `epsRel` (`robust`), or, for turned
-blocks, a plan that stands at its planned positions (`nominal`). -/
-theorem ai_passed_safe (req : KaplaCore.PlanRequest) (sem : KaplaCore.SemanticEngine)
-    (reply : Except String String) (c : KaplaCore.Candidate)
-    (hpass : (KaplaPlanner.judge req (some KaplaPhysics.physicsEngine) sem reply).passed = true)
-    (hcand : (KaplaPlanner.judge req (some KaplaPhysics.physicsEngine) sem reply).candidate =
+physics engine for a person's rules (`engineFor rules`), the design's plan is one the engine
+accepts. So `coreCheck_ok_sound` holds for it, with the checks the person chose: either a safe plan
+under placement errors up to `epsRel` (`robust`), or, for turned blocks, a plan that stands at its
+planned positions (`nominal`). And every extra rule of the person holds after every step. -/
+theorem ai_passed_safe (rules : BuildRules) (req : KaplaCore.PlanRequest)
+    (sem : KaplaCore.SemanticEngine) (reply : Except String String) (c : KaplaCore.Candidate)
+    (hpass : (KaplaPlanner.judge req (some (KaplaPhysics.engineFor rules)) sem reply).passed = true)
+    (hcand : (KaplaPlanner.judge req (some (KaplaPhysics.engineFor rules)) sem reply).candidate =
       some c) :
-    c.physics = KaplaPhysics.coreCheck {} req.human req.blocks c.plan ∧
+    c.physics = KaplaPhysics.coreCheckWith (KaplaPhysics.optionsOf rules) rules.extra req.human
+        req.blocks c.plan ∧
       (∀ st ∈ c.plan.steps, 1 ≤ st.blocks.length ∧ st.blocks.length ≤ req.human.hands) ∧
       ((c.physics.assurance = .robust ∧ ∃ b, KaplaPhysics.buildOf c.plan.blocks = some b ∧
-          KaplaPhysics.SafePlan {} req.human.epsRel req.blocks b) ∨
-        (c.physics.assurance = .nominal ∧ KaplaPhysics.buildOf c.plan.blocks = none ∧
+          KaplaPhysics.SafePlan (KaplaPhysics.optionsOf rules) req.human.epsRel req.blocks b) ∨
+        (c.physics.assurance = .nominal ∧ rules.allowTurned = true ∧
+          KaplaPhysics.buildOf c.plan.blocks = none ∧
           ∃ tb, KaplaPhysics.turnedBuildOf c.plan.blocks = some tb ∧
-            KaplaPhysics.TSafePlan req.blocks tb)) := by
+            KaplaPhysics.TSafePlan req.blocks tb)) ∧
+      KaplaPhysics.KeepsRulesThroughout rules.extra c.plan.blocks := by
   obtain ⟨he, hok, -⟩ := KaplaPlanner.judge_checked_passed req _ sem reply c hpass hcand
-  have he' : c.physics = KaplaPhysics.coreCheck {} req.human req.blocks c.plan := he
+  have he' : c.physics = KaplaPhysics.coreCheckWith (KaplaPhysics.optionsOf rules) rules.extra
+      req.human req.blocks c.plan := he
   rw [he'] at hok ⊢
-  obtain ⟨hsteps, hsafe⟩ := KaplaPhysics.coreCheck_ok_sound {} req.human req.blocks c.plan hok
-  refine ⟨rfl, hsteps, ?_⟩
-  rcases hsafe with ⟨ha, hb⟩ | ⟨ha, -, hb⟩
+  obtain ⟨hcore, hass, hkeep⟩ := KaplaPhysics.coreCheckWith_ok_sound _ _ _ _ _ hok
+  obtain ⟨hsteps, hsafe⟩ :=
+    KaplaPhysics.coreCheck_ok_sound (KaplaPhysics.optionsOf rules) req.human req.blocks c.plan hcore
+  refine ⟨rfl, hsteps, ?_, hkeep⟩
+  rw [hass]
+  rcases hsafe with ⟨ha, hb⟩ | ⟨ha, hn, hb⟩
   · exact Or.inl ⟨ha, hb⟩
-  · exact Or.inr ⟨ha, hb⟩
+  · exact Or.inr ⟨ha, hn, hb⟩
 
 -- Every hypothesis of `ai_passed_safe` can hold: one flat block on the ground, checked by the
 -- real physics engine, passes, has a candidate, and gets the full (`robust`) check. A
@@ -192,17 +206,20 @@ theorem ai_passed_safe (req : KaplaCore.PlanRequest) (sem : KaplaCore.SemanticEn
 def defaultMaxBlocks : Nat := 200
 
 /-- One problem from the physics engine, in words. Steps and blocks count from 1 here. -/
-def describe : Diagnostic → String
+def describe (rules : BuildRules) : Diagnostic → String
   | .unstable s b => s!"step {s + 1}: not shown to stand after block {b + 1} (falls, risky, or a turn the engine cannot check)"
   | .slides s c => s!"step {s + 1}: slides at contact {c + 1}"
   | .unreachable s => s!"step {s + 1}: may be hard to reach (warning only)"
   | .overlap i j => s!"blocks {i + 1} and {j + 1} overlap"
-  | .clearance i j => s!"blocks {i + 1} and {j + 1} have a small gap: a 3.9 mm error could close it"
-  | .tightSlot s => s!"step {s + 1}: the block goes into a slot exactly its own width; a 3.9 mm error could close it"
+  | .clearance i j => s!"blocks {i + 1} and {j + 1} have a small gap: a {KaplaCore.mmText rules.human.epsRel} error could close it"
+  | .tightSlot s => s!"step {s + 1}: the block goes into a slot exactly its own width; a {KaplaCore.mmText rules.human.epsRel} error could close it"
   | .unevenSupports b => s!"block {b + 1} rests on supports built differently"
   | .tooManyHands s => s!"step {s + 1}: more blocks than the builder has hands"
   | .emptyStep s => s!"step {s + 1}: places no block"
   | .tooManyBlocks used limit => s!"uses {used} blocks, at most {limit} allowed"
+  | .ruleBroken r s => match rules.extra[r]? with
+    | some x => s!"step {s + 1}: breaks your rule \"{x.describe}\""
+    | none => s!"step {s + 1}: breaks your rule {r + 1}"
 
 /-- The plan has a block turned by a 15° step that is not a quarter turn (B6). Such plans
 are checked at the planned positions only. -/
@@ -211,49 +228,66 @@ def hasTurnedBlocks (plan : BuildPlan) : Bool :=
 
 /-- Short lines for the page notes and the terminal. The first line says what `ok` promises,
 read from the report's `assurance`: `robust` covers placement errors and gaps, `nominal`
-only the planned positions. -/
-def physicsLines (opts : KaplaPhysics.PlanOptions) (plan : BuildPlan) (r : PhysicsReport) :
-    List String :=
-  let clearance := if opts.clearance then "" else " (small gaps and tight slots not checked)"
+only the planned positions. Then the rules, if they are not the defaults, with each extra rule
+kept or broken; then the problems. -/
+def physicsLines (rules : BuildRules) (plan : BuildPlan) (r : PhysicsReport) : List String :=
+  let clearance := if rules.clearance then "" else " (small gaps and tight slots not checked)"
+  let mm := KaplaCore.mmText rules.human.epsRel
   let first :=
     match r.ok, r.assurance with
     | true, .robust =>
-      s!"Physics (verified): well-formed and solid after every block, for 3.9 mm placement errors{clearance}"
+      s!"Physics (verified): well-formed and solid after every block, for {mm} placement errors{clearance}"
     | true, .nominal =>
       "Physics (verified): well-formed and stands after every block, at the planned positions only (turned blocks: placement errors, gaps and reach not checked)"
     | false, _ =>
       if hasTurnedBlocks plan then
-        "Physics: not shown to stand at the planned positions (turned blocks)"
+        if rules.allowTurned then "Physics: not shown to stand at the planned positions (turned blocks)"
+        else "Physics: not shown to be safe to build: turned blocks are not allowed by your rules"
+      else if !KaplaPhysics.checkRules rules.extra plan.blocks then
+        if (r.diagnostics.filter (!· matches .ruleBroken ..)).isEmpty then
+          "Not accepted: it breaks your rules (below)"
+        else "Not accepted: it breaks your rules, and physics found the problems below"
       else s!"Physics: not shown to be safe to build{clearance}"
-  first :: r.diagnostics.map describe
+  let ruleLines :=
+    if !rules.custom then [] else
+      s!"Rules: {", ".intercalate (rules.describe.take 4)}" ::
+        rules.extra.zipIdx.map fun (x, i) =>
+          if KaplaPhysics.checkRule x plan.blocks then
+            s!"Your rule (verified): {x.describe}: kept after every step"
+          else
+            let whereBroken := (r.diagnostics.findSome? fun
+              | .ruleBroken j st => if j == i then some s!" at step {st + 1}" else none
+              | _ => none).getD ""
+            s!"Your rule: {x.describe}: broken{whereBroken}"
+  first :: ruleLines ++ (r.diagnostics.filter (!· matches .ruleBroken ..)).map (describe rules)
 
-/-- Run the verified physics engine (`physicsEngine` when clearance is on). -/
-def runPhysics (opts : KaplaPhysics.PlanOptions) (maxBlocks : Nat) (plan : BuildPlan) :
-    PhysicsReport :=
-  KaplaPhysics.coreCheck opts HumanModel.default maxBlocks plan
+/-- Run the verified physics engine with these rules (`engineFor rules`). With the default rules
+it is `physicsEngine`. -/
+def runPhysics (rules : BuildRules) (maxBlocks : Nat) (plan : BuildPlan) : PhysicsReport :=
+  (KaplaPhysics.engineFor rules).check rules.human maxBlocks plan
 
 /-- Check a blueprint file with the verified physics engine. -/
-def check (opts : KaplaPhysics.PlanOptions) (file : String) (maxBlocks : Nat) : IO UInt32 := do
+def check (rules : BuildRules) (file : String) (maxBlocks : Nat) : IO UInt32 := do
   match readBuildPlan (← IO.FS.readFile file) with
   | .error e =>
     IO.eprintln s!"{file}: {e}"
     return 1
   | .ok plan =>
-    let r := runPhysics opts maxBlocks plan
+    let r := runPhysics rules maxBlocks plan
     IO.println s!"{file}: {plan.steps.length} steps, {plan.blockCount} blocks"
-    for line in physicsLines opts plan r do IO.println s!"  {line}"
+    for line in physicsLines rules plan r do IO.println s!"  {line}"
     return if r.ok then 0 else 1
 
 /-- Write the page for a blueprint file, with the physics result in the notes. -/
-def view (opts : KaplaPhysics.PlanOptions) (file : String) (out : String) : IO UInt32 := do
+def view (rules : BuildRules) (file : String) (out : String) : IO UInt32 := do
   let txt ← IO.FS.readFile file
   match KaplaWeb.parsePlan txt, readBuildPlan txt with
   | .error e, _ | _, .error e =>
     IO.eprintln s!"{file}: {e}"
     return 1
   | .ok p, .ok plan =>
-    let r := runPhysics opts defaultMaxBlocks plan
-    let p := { p with notes := p.notes ++ physicsLines opts plan r }
+    let r := runPhysics rules defaultMaxBlocks plan
+    let p := { p with notes := p.notes ++ physicsLines rules plan r }
     IO.FS.createDirAll out
     let path := System.FilePath.mk out / "index.html"
     IO.FS.writeFile path (KaplaWeb.render p)
@@ -291,7 +325,7 @@ def blueprintJson (title : String) (target : KaplaCore.TargetSpec) (c : KaplaCor
 /-- Run a planner strategy on a target and list its candidates. The physics engine and the
 scorer run here again on each candidate, so what is printed never comes from the planner's
 own report (a planner can return any report it likes). -/
-def plan (opts : KaplaPhysics.PlanOptions) (name : String) (effort : KaplaPlanner.Claude.Effort)
+def plan (rules : BuildRules) (name : String) (effort : KaplaPlanner.Claude.Effort)
     (blocks : Nat) (targetFile out : Option String) : IO UInt32 := do
   match KaplaPlanner.strategyWithEffort? name effort with
   | none =>
@@ -305,15 +339,17 @@ def plan (opts : KaplaPhysics.PlanOptions) (name : String) (effort : KaplaPlanne
         | .ok m => pure (some (KaplaCore.TargetSpec.ofBubbles m))
         | .error e => IO.eprintln s!"{file}: {e}"; pure none
     let some target := target | return 1
-    let req : KaplaCore.PlanRequest := { target, blocks, maxCandidates := 1 }
-    let cands ← s.toPlanner.plan req KaplaPhysics.physicsEngine KaplaSemantics.semanticEngine
+    let req : KaplaCore.PlanRequest := { target, blocks, maxCandidates := 1, human := rules.human, rules }
+    if rules.custom then
+      IO.println s!"rules: {"; ".intercalate rules.describe}"
+    let cands ← s.toPlanner.plan req (KaplaPhysics.engineFor rules) KaplaSemantics.semanticEngine
     let effortNote := if KaplaPlanner.usesClaude s.name then s!" (effort {effort.name})" else ""
     IO.println s!"strategy {s.name}{effortNote}: {cands.length} candidates"
     for c in cands do
-      let physics := runPhysics opts blocks c.plan
+      let physics := runPhysics rules blocks c.plan
       let score := KaplaSemantics.semanticEngine.score target c.score.height c.plan.blocks
       IO.println s!"  {c.plan.blockCount} blocks, height {KaplaPlanner.showQ score.height}, score {KaplaPlanner.showScore score.score}, {if score.accepted then "accepted" else "not accepted"}"
-      for line in physicsLines opts c.plan physics do
+      for line in physicsLines rules c.plan physics do
         IO.println s!"    {line}"
     match out, cands with
     | some path, c :: _ =>
@@ -396,12 +432,13 @@ def planToViewJson (plan : BuildPlan) : Json :=
     [ ("blocks", Json.arr (st.blocks.map pose).toArray), ("phase", Json.str st.phase) ]).toArray)]
 
 /-- A block plan kept in the gallery: the planner that made it, the block limit it had, the height
-it chose for the target, and the steps. -/
+it chose for the target, the steps, and the rules it was made and is checked with. -/
 structure SavedPlan where
   planner : String
   blocks : Nat
   height : Q
   plan : BuildPlan
+  rules : BuildRules := {}
 
 /-- One gallery entry: its name, the target, and maybe a block plan for the target. -/
 structure Entry where
@@ -409,13 +446,16 @@ structure Entry where
   model : KaplaCore.BubbleModel
   proposal : Option SavedPlan
 
-/-- A saved plan as JSON: `planner`, `blocks`, `height` and `steps`. Numbers are exact. -/
+/-- A saved plan as JSON: `planner`, `blocks`, `height`, `steps`, and `rules` when they are not the
+defaults. Numbers are exact. -/
 def savedPlanToJson (p : SavedPlan) : Json :=
-  Json.mkObj
+  Json.mkObj <|
     [ ("planner", Json.str p.planner)
     , ("blocks", Lean.toJson p.blocks)
     , ("height", KaplaSemantics.ratToJson p.height)
-    , ("steps", (planToViewJson p.plan).getObjValD "steps") ]
+    , ("steps", (planToViewJson p.plan).getObjValD "steps") ] ++
+    -- Only rules that differ from the defaults are written, so older entries keep their text.
+    (if p.rules.custom then [("rules", KaplaPlanner.rulesToJson p.rules)] else [])
 
 /-- Read a saved plan. The block limit is from 1 to `defaultMaxBlocks`, the plan uses at most that many
 blocks, and the height is above 0. -/
@@ -424,13 +464,16 @@ def readSavedPlan (j : Json) : Except String SavedPlan := do
   let blocks ← j.getObjValAs? Nat "blocks"
   let height ← readQ (← j.getObjVal? "height")
   let plan ← readBuildPlan j.compress
+  let rules ← match j.getObjVal? "rules" with
+    | .ok .null | .error _ => pure {}
+    | .ok r => (KaplaPlanner.readRules r).mapError (s!"rules: " ++ ·)
   unless 0 < blocks && blocks ≤ defaultMaxBlocks do
     throw s!"\"blocks\" must be from 1 to {defaultMaxBlocks}, got {blocks}"
   unless plan.blockCount ≤ blocks do
     throw s!"the plan uses {plan.blockCount} blocks, more than its limit of {blocks}"
   unless 0 < height do
     throw s!"\"height\" must be above 0"
-  return { planner, blocks, height, plan }
+  return { planner, blocks, height, plan, rules }
 
 /-- An entry as JSON, as it is written to a file. -/
 def entryToJson (e : Entry) : Json :=
@@ -478,8 +521,7 @@ def exampleEntry : Entry :=
 positions only), `hardToReach` (some step got the reach warning), `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
 physics engine and the scorer run here, so none of this comes from the planner or from a file. -/
 def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String Json := do
-  let opts : KaplaPhysics.PlanOptions := {}
-  let physics := runPhysics opts p.blocks p.plan
+  let physics := runPhysics p.rules p.blocks p.plan
   let score := KaplaSemantics.semanticEngine.score target p.height p.plan.blocks
   let view ← (KaplaWeb.readPlan (planToViewJson p.plan)).map KaplaWeb.pageData
   return Json.mkObj
@@ -488,7 +530,8 @@ def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String
     , ("stands", Json.bool physics.ok)
     , ("assurance", Json.str (match physics.assurance with | .robust => "robust" | .nominal => "nominal"))
     , ("hardToReach", Json.bool (physics.diagnostics.any fun | .unreachable _ => true | _ => false))
-    , ("physics", Json.arr ((physicsLines opts p.plan physics).map Json.str).toArray)
+    , ("physics", Json.arr ((physicsLines p.rules p.plan physics).map Json.str).toArray)
+    , ("rules", KaplaPlanner.rulesToJson p.rules)
     , ("saved", savedPlanToJson p) ]
 
 /-- `GET /gallery` -/
@@ -593,9 +636,9 @@ def pullRequestBody (e : Entry) : String :=
   let plan := match e.proposal with
     | none => "No block plan: only the target."
     | some p =>
-      let physics := runPhysics {} p.blocks p.plan
+      let physics := runPhysics p.rules p.blocks p.plan
       s!"Block plan by `{p.planner}`: {p.plan.blockCount} blocks (limit {p.blocks}), \
-        height {KaplaPlanner.showQ p.height}.\n\n{"\n".intercalate ((physicsLines {} p.plan physics).map ("- " ++ ·))}"
+        height {KaplaPlanner.showQ p.height}.\n\n{"\n".intercalate ((physicsLines p.rules p.plan physics).map ("- " ++ ·))}"
   s!"Adds `gallery/{e.name}.json` to the gallery: a target with {e.model.bubbles.length} bubbles.\n\n\
     {plan}\n\nOpened from the Defy Gravity page (`kapla serve`)."
 
@@ -709,22 +752,24 @@ def plannerSeconds : Nat := 900
 
 /-- Run a planner and ask for one plan. Physics and the scorer are run here again, so the badges do not
 depend on what a planner reports about itself. The height is the one the planner chose. -/
-def makeProposal (s : KaplaPlanner.Strategy) (m : KaplaCore.BubbleModel) (blocks : Nat) :
-    IO Json := do
+def makeProposal (s : KaplaPlanner.Strategy) (m : KaplaCore.BubbleModel) (blocks : Nat)
+    (rules : BuildRules) : IO Json := do
   let target := KaplaCore.TargetSpec.ofBubbles m
-  let candidates ← s.toPlanner.plan { target, blocks, maxCandidates := 1 }
-    KaplaPhysics.physicsEngine KaplaSemantics.semanticEngine
+  let candidates ← s.toPlanner.plan
+    { target, blocks, maxCandidates := 1, human := rules.human, rules }
+    (KaplaPhysics.engineFor rules) KaplaSemantics.semanticEngine
   match candidates.head? with
   | none => return Json.mkObj [("proposal", .null)]
   | some c =>
-    let saved : SavedPlan := { planner := s.name, blocks, height := c.score.height, plan := c.plan }
+    let saved : SavedPlan := { planner := s.name, blocks, height := c.score.height, plan := c.plan, rules }
     return Json.mkObj [("proposal", ← IO.ofExcept (proposalJson target saved))]
 
-/-- `POST /plan` with `planner`, `blocks`, `model` and, for the planners that ask Claude, an
+/-- `POST /plan` with `planner`, `blocks`, `model`, optional `rules` (`KaplaPlanner.readRules`;
+missing means the default rules) and, for the planners that ask Claude, an
 optional `effort` (`low`, `medium` or `high`, default `high`). The answer is `proposal`, or null
 if the planner made none. The page gets an answer even if a planner does not end. -/
 def postPlan (body : String) : IO Reply := do
-  let parsed : Except String (String × KaplaPlanner.Claude.Effort × Nat × KaplaCore.BubbleModel) := do
+  let parsed : Except String (String × KaplaPlanner.Claude.Effort × Nat × KaplaCore.BubbleModel × BuildRules) := do
     let j ← KaplaSemantics.parseJson body
     let planner ← (← j.getObjVal? "planner").getStr?
     let effort ← match (j.getObjValAs? String "effort").toOption with
@@ -734,16 +779,19 @@ def postPlan (body : String) : IO Reply := do
         | none => throw s!"the effort must be low, medium or high, not \"{e}\""
     let blocks ← j.getObjValAs? Nat "blocks"
     let m ← KaplaSemantics.decode (← j.getObjVal? "model").compress
-    return (planner, effort, blocks, m)
+    let rules ← match j.getObjVal? "rules" with
+      | .ok .null | .error _ => pure {}
+      | .ok r => (KaplaPlanner.readRules r).mapError (s!"rules: " ++ ·)
+    return (planner, effort, blocks, m, rules)
   match parsed with
   | .error e => return errorReply .badRequest s!"No proposal: {e}"
-  | .ok (name, effort, blocks, m) =>
+  | .ok (name, effort, blocks, m, rules) =>
     if blocks == 0 || blocks > defaultMaxBlocks then
       return errorReply .badRequest s!"The block limit must be a whole number from 1 to {defaultMaxBlocks}."
     let some s := (sitePlanners.find? (·.name == name)).map fun s =>
         (KaplaPlanner.strategyWithEffort? s.name effort).getD s
       | return errorReply .badRequest s!"There is no planner named {name}."
-    let task ← IO.asTask (makeProposal s m blocks) .dedicated
+    let task ← IO.asTask (makeProposal s m blocks rules) .dedicated
     let rec wait : Nat → IO Bool
       | 0 => return false
       | n + 1 => do
@@ -756,6 +804,42 @@ def postPlan (body : String) : IO Reply := do
     match task.get with
     | .ok j => return { json := j.compress }
     | .error e => return errorReply .internalServerError s!"The planner stopped with an error: {e}"
+
+/-! ### Rules -/
+
+/-- The rules in words, made by Lean, so the person sees what will be checked (not what Claude
+said). -/
+def rulesReply (r : BuildRules) : Json :=
+  Json.mkObj
+    [ ("rules", KaplaPlanner.rulesToJson r)
+    , ("lines", Json.arr (r.describe.map Json.str).toArray)
+    , ("extra", Json.arr (r.extra.map fun x => Json.str x.describe).toArray) ]
+
+/-- `POST /rules/describe` with `rules`: the rules read back, and in words. A bad rule is a 400. -/
+def postDescribeRules (body : String) : IO Reply := do
+  match (do (KaplaPlanner.readRules (← (← KaplaSemantics.parseJson body).getObjVal? "rules")) : Except String BuildRules) with
+  | .error e => return errorReply .badRequest s!"These rules cannot be used: {e}"
+  | .ok r => return { json := (rulesReply r).compress }
+
+/-- `POST /rules/suggest` with `text`, a person's rules in their own words. Claude turns them into
+rules; the answer is `extra` (the rules as JSON), `lines` (each in words, made by Lean) and
+`notCheckable` (what Claude could not express as a rule: it is not checked). -/
+def postSuggestRules (key : Option String) (body : String) : IO Reply := do
+  if key.isNone then
+    return errorReply .serviceUnavailable
+      "Turning words into rules asks Claude, and the API key is missing. Add a rule from the list instead."
+  match (do (← (← KaplaSemantics.parseJson body).getObjVal? "text").getStr? : Except String String) with
+  | .error e => return errorReply .badRequest s!"No rules: {e}"
+  | .ok text =>
+    if text.trimAscii.isEmpty then return errorReply .badRequest "Write the rule first."
+    match ← KaplaPlanner.suggestRules text with
+    | .error e => return errorReply .badGateway s!"No rules: {e}"
+    | .ok (extra, notCheckable) =>
+      let extra := extra.filter fun x => ({ extra := [x] } : BuildRules).valid
+      return { json := (Json.mkObj
+        [ ("extra", Json.arr (extra.map KaplaPlanner.ruleToJson).toArray)
+        , ("lines", Json.arr (extra.map fun x => Json.str x.describe).toArray)
+        , ("notCheckable", Json.arr (notCheckable.map Json.str).toArray) ]).compress }
 
 /-- The biggest request we read. A model has at most 32 bubbles, so this is plenty. -/
 def maxBodyBytes : UInt64 := 1024 * 1024
@@ -799,6 +883,13 @@ instance : Handler Site where
         guarded (postChat site.key body)
       catch e =>
         sendJson (errorReply .badRequest s!"The message was not sent: could not read it: {e}")
+    else if method == .post && (path == "/rules/describe" || path == "/rules/suggest") then
+      try
+        let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
+        if path == "/rules/describe" then guarded (postDescribeRules body)
+        else guarded (postSuggestRules site.key body)
+      catch e =>
+        sendJson (errorReply .badRequest s!"No rules: could not read the request: {e}")
     else if method == .get && path == "/planners" then
       sendJson getPlanners
     else if method == .post && path == "/plan" then
@@ -868,11 +959,12 @@ def galleryCheck : IO UInt32 := do
   return if bad == 0 then 0 else 1
 
 def usage : String :=
-  "usage: kapla check BLUEPRINT.json [--max N] [--no-clearance] [--robust-only]\n" ++
-  "       kapla view BLUEPRINT.json [--out DIR] [--no-clearance] [--robust-only]\n" ++
+  "usage: kapla check BLUEPRINT.json [--max N] [RULES]\n" ++
+  "       kapla view BLUEPRINT.json [--out DIR] [RULES]\n" ++
   "       kapla plan [--blocks N] [--strategy NAME] [--effort low|medium|high] [--target MODEL.json] [--out BLUEPRINT.json]\n" ++
   "       kapla serve [--port N]\n" ++
-  "       kapla gallery-check"
+  "       kapla gallery-check\n" ++
+  "RULES (check, view, plan): [--no-clearance] [--robust-only] [--tolerance Q] [--hands N] [--rules FILE.json]"
 
 /-- The one file that holds the API key: `.env` in the top folder of the repo. Only `main` reads it. -/
 def keyFile : System.FilePath := ".env"
@@ -888,23 +980,50 @@ def useKeyFile (args : List String) : IO (Option UInt32) := do
     { cmd := (← IO.appPath).toString, args := args.toArray, env := #[("ANTHROPIC_API_KEY", some k)] }
   return some (← child.wait)
 
+/-- Take the rule flags out of the arguments: `--no-clearance`, `--robust-only`, `--tolerance Q`,
+`--hands N`, `--rules FILE.json`. The rest of the arguments are given back. -/
+def rulesFromArgs (args : List String) : IO (Except String (BuildRules × List String)) := do
+  let rec go (r : BuildRules) (rest : List String) : List String → IO (Except String (BuildRules × List String))
+    | [] => pure (.ok (r, rest.reverse))
+    | "--no-clearance" :: as => go { r with clearance := false } rest as
+    | "--robust-only" :: as => go { r with allowTurned := false } rest as
+    | "--tolerance" :: q :: as => match KaplaPlanner.parseQ q with
+      | .ok e => go { r with human := { r.human with epsRel := e } } rest as
+      | .error e => pure (.error s!"--tolerance: {e}")
+    | "--hands" :: n :: as => match n.toNat? with
+      | some n => go { r with human := { r.human with hands := n } } rest as
+      | none => pure (.error s!"--hands: not a whole number: {n}")
+    | "--rules" :: f :: as => do
+      match (← (IO.FS.readFile f).toBaseIO) with
+      | .error e => pure (.error s!"--rules: {e}")
+      | .ok text => match KaplaSemantics.parseJson text >>= KaplaPlanner.readRules with
+        | .ok fr => go { r with extra := r.extra ++ fr.extra } rest as
+        | .error e => pure (.error s!"--rules {f}: {e}")
+    | a :: as => go r (a :: rest) as
+  match ← go {} [] args with
+  | .ok (r, rest) =>
+    if r.valid then return .ok (r, rest)
+    else return .error ("the rules are out of range: --tolerance from 0 to " ++
+      KaplaPlanner.showQ BuildRules.maxEpsRel ++ s!", --hands from 1 to {BuildRules.maxHands}")
+  | .error e => return .error e
+
 def main (args : List String) : IO UInt32 := do
   if let some code ← useKeyFile args then return code
-  let opts : KaplaPhysics.PlanOptions :=
-    { clearance := !args.contains "--no-clearance",
-      allowNominal := !args.contains "--robust-only" }
-  match args.filter (fun a => a != "--no-clearance" && a != "--robust-only") with
-  | ["check", file] => check opts file defaultMaxBlocks
+  let (rules, args) ← match ← rulesFromArgs args with
+    | .ok ra => pure ra
+    | .error e => IO.eprintln e; IO.eprintln usage; return 64
+  match args with
+  | ["check", file] => check rules file defaultMaxBlocks
   | ["check", file, "--max", n] =>
     match n.toNat? with
-    | some n => check opts file n
+    | some n => check rules file n
     | none => IO.eprintln usage; return 64
-  | ["view", file] => view opts file "out"
-  | ["view", file, "--out", out] => view opts file out
+  | ["view", file] => view rules file "out"
+  | ["view", file, "--out", out] => view rules file out
   | "plan" :: rest =>
     let rec go (name : String) (effort : KaplaPlanner.Claude.Effort) (blocks : Nat)
         (target out : Option String) : List String → IO UInt32
-      | [] => plan opts name effort blocks target out
+      | [] => plan rules name effort blocks target out
       | "--strategy" :: n :: r => go n effort blocks target out r
       | "--effort" :: e :: r => match KaplaPlanner.Claude.Effort.ofName? e with
         | some e => go name e blocks target out r

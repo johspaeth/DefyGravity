@@ -27,6 +27,14 @@ Flags for `check`, `view`, `plan` and `serve`:
   either way.
 - `--robust-only`: refuses plans with turned blocks (15° steps that are not quarter turns).
   Without it, such a plan can be `ok`, but only at the planned positions: the notes say so.
+- `--tolerance Q`: the placement error each block may have, in block units (1 unit = 7.8 mm),
+  from `0` to `1`. Default `1/2` (3.9 mm). Bigger is stricter.
+- `--hands N`: the most blocks one step may place, 1 or 2 (default 1).
+- `--rules FILE.json`: rules of your own, such as a height limit or "no standing blocks". The
+  format is the `rules` object in `web/README.md` (only `extra` is read from the file).
+
+For `plan`, these flags are the rules the planner works with: the `ai` planners are told them,
+and the physics engine the planner gets checks them (`KaplaPhysics.engineFor`).
 
 `serve` and the `ai` planners need an API key (below). With no key, the chat says so and the
 rest of the site works.

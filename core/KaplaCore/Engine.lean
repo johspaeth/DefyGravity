@@ -1,5 +1,6 @@
 import KaplaCore.Report
 import KaplaCore.Target
+import KaplaCore.Rules
 
 /-! # Engine interfaces
 
@@ -32,6 +33,10 @@ structure PlanRequest where
   /-- Use at most this many blocks. -/
   blocks        : Nat
   human         : HumanModel := .default
+  /-- The checks that apply and the person's own rules (`KaplaCore.Rules`). The physics engine
+  the planner gets checks these; the planner reads them only to make better proposals.
+  `rules.human` is not used: `human` above is the builder. -/
+  rules         : BuildRules := {}
   /-- Return at most this many candidates. -/
   maxCandidates : Nat := 3
   /-- Call `PhysicsEngine.check` at most this many times. -/

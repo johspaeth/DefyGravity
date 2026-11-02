@@ -33,6 +33,8 @@ inductive Diagnostic where
   | emptyStep (step : Nat)
   /-- The plan uses `used` blocks, but only `limit` are allowed. -/
   | tooManyBlocks (used limit : Nat)
+  /-- The plan breaks extra rule number `rule` (in `BuildRules.extra`), first at `step`. -/
+  | ruleBroken (rule step : Nat)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 /-- How much the physics engine's `ok` promises. -/

@@ -31,7 +31,29 @@ and the scorer on the plan again each time, so a file cannot say that a plan sta
     "planner": "ai",               // the planner that made it
     "blocks": 40,                  // its block limit, 1 to 200; the plan uses at most this many
     "height": "61/2",              // the height it chose, an exact number
-    "steps": [...] } }             // the steps, in the blueprint format below
+    "steps": [...],                // the steps, in the blueprint format below
+    "rules": {...} } }             // optional: the rules it was made with (below); missing = defaults
+```
+
+**Rules for a plan.** Under the planner bar, "Rules for this plan" sets the rules the next proposal
+is made and checked with: the placement error (0 to 7.8 mm; bigger is stricter), blocks per step,
+whether small gaps and tight slots are checked, whether turned blocks are allowed, and rules of your
+own: no block higher than a height, no blocks of a kind (flat, on edge, standing), at most N blocks
+of a kind, fits in an area. Add one from the list, or write it in your words and press "Turn into
+rules": Claude turns the words into rules, and the list shows each one as Lean reads it back, so
+you see what will be checked. What no rule can say is listed as not checked. The planner is told
+the rules, and the verified physics engine checks them (`KaplaPhysics.coreCheckWith`). A saved plan
+keeps its rules, and opening it shows them again. Format:
+
+```json
+{ "tolerance": "1/2",   // placement error in block units (1 unit = 7.8 mm), 0 to 1
+  "hands": 1,           // blocks per step, 1 or 2
+  "clearance": true,    // check small gaps and tight slots
+  "turned": true,       // allow turned blocks (checked at the planned positions only)
+  "extra": [ {"rule": "maxHeight", "height": "50"},          // lengths in block units
+             {"rule": "noUpright", "up": "upright"},          // "flat", "edge" or "upright"
+             {"rule": "maxUpright", "up": "edge", "count": 3},
+             {"rule": "fitsIn", "x": "60", "y": "40"} ] }     // every field is optional
 ```
 
 A file name uses only small letters, digits, `-` and `_`; other files in the folder are not listed.
@@ -53,7 +75,9 @@ Requests between the page and the server. Every answer is JSON, and a failure ha
 | `GET /status` | | `{"key": true or false}`: does the server have an API key? |
 | `POST /chat` | `{"text": newest message, "messages": [{"role": "user" or "assistant", "text": text}], "model": model on screen or null}` | `{"reply": text, "model": new model, or null if Claude only answered}`. 503 with no key, 502 if Claude failed |
 | `GET /planners` | | `{"planners": [names], "claude": [names]}`, from `KaplaPlanner.strategies`. The `claude` ones ask Claude and take an `effort` |
-| `POST /plan` | `{"planner": name, "blocks": block limit, "model": model on screen, "effort": "low", "medium" or "high"}` (`effort` is optional, default `"high"`; only the planners that ask Claude use it) | `{"proposal": ...}`, or null if the planner made none. A proposal has `view` (blocks and steps for the viewer), `score` (the score report), `stands`, `assurance` (`"robust"`: also stands with 3.9 mm placement errors; `"nominal"`: turned blocks, checked at the planned positions only), `hardToReach` (some step got the reach warning), `physics` (lines of text) and `saved` (the plan, as a gallery file keeps it). 504 if the planner takes over 15 minutes |
+| `POST /plan` | `{"planner": name, "blocks": block limit, "model": model on screen, "rules": rules, "effort": "low", "medium" or "high"}` (`rules` is optional, default rules when missing; `effort` is optional, default `"high"`; only the planners that ask Claude use it) | `{"proposal": ...}`, or null if the planner made none. A proposal has `view` (blocks and steps for the viewer), `score` (the score report), `stands`, `assurance` (`"robust"`: also stands with 3.9 mm placement errors; `"nominal"`: turned blocks, checked at the planned positions only), `hardToReach` (some step got the reach warning), `physics` (lines of text, with each extra rule kept or broken), `rules` (the rules it was checked with) and `saved` (the plan, as a gallery file keeps it). 504 if the planner takes over 15 minutes |
+| `POST /rules/describe` | `{"rules": rules}` | `{"rules", "lines", "extra"}`: the rules as the server read them, and in words (every rule, and each extra rule). 400 if a rule is bad or out of range |
+| `POST /rules/suggest` | `{"text": a person's rules in words}` | `{"extra": [rules], "lines": [each in words], "notCheckable": [what no rule can say]}`. Asks Claude: 503 with no API key, 502 if Claude fails |
 | `POST /gallery` | `{"name": text, "model": model, "overwrite": true or false, "proposal": the proposal's "saved", or null}` | `{"name": clean name, "model": saved model}`. 409 with `{"name": clean name}` if the name exists and `overwrite` is not true. 400 if the name, the model or the plan is bad |
 | `POST /gallery/NAME/pr` | | `{"url": the PR}`. 503 without `gh` logged in, 502 if git or `gh` failed |
 

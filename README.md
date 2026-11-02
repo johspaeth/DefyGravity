@@ -15,6 +15,13 @@ notes, not needed to understand the project: [docs/WORKSPLIT.md](docs/WORKSPLIT.
   1/2 of a block thickness (3.9 mm) from its planned spot, along `x` and along `y`.
 - **Blocks fit where they go**: no gaps that a 3.9 mm error could close, no block dropped
   into a slot exactly its own width, and one block per step (the `hands` setting, default 1).
+- **Your own rules hold after every step**, if you add any while planning (on the page, or
+  `--rules`): no block higher than a height, no blocks of a kind, at most N of a kind, fits in an
+  area. Their meaning is in `specs/KaplaSpecs/PhysicsRules/UserRules.lean`; the check is proven to
+  agree with it (`checkRule_iff`, `coreCheckWith_ok_sound`). You can also make the check above
+  stricter or looser for one plan: the placement error (0 to 7.8 mm), blocks per step, the gap
+  checks, and turned blocks. The guarantees above then hold for the rules you chose, and the page
+  says which ones those were.
 
 - **Every block touches the target, and every part of the target has a block**: at least
   one 1 × 1 × 1 cube per block and per bubble. The checker says yes exactly when this holds.
@@ -186,6 +193,11 @@ Get a review from the whole team before you merge them.
   JSON file into the `BuildPlan` that the physics engine checks. It has no proof.
 - **The model reader** `KaplaSemantics.decode` (`semantics/KaplaSemantics/Json.lean`). It turns
   a model file into the `BubbleModel` that the scorer uses. It has `#guard` tests, no proof.
+- **The rules reader** `KaplaPlanner.readRules` (`planner/KaplaPlanner/RuleText.lean`). It turns
+  the rules from the page, a gallery file or `--rules` into the `BuildRules` the engine checks. It
+  has `#guard` tests (rules survive writing and reading), no proof. Claude only *suggests* rules
+  from a person's words; the page shows each rule in words made by Lean (`UserRule.describe`)
+  before it is used.
 - **The viewer** (`KaplaWeb.parsePlan`, three.js in the browser). It reads the plan again, as
   `Float`s, only to draw it. A bug here shows a wrong picture; it does not change a verdict.
 - **The web server** in `app/Main.lean` (`kapla serve`). It runs the physics check and the

@@ -1,5 +1,6 @@
 import KaplaPhysics.Engine
 import KaplaPhysics.CoreAdapter
+import KaplaPhysics.UserRules
 import KaplaSpecs.PhysicsRules.Examples
 
 /-! # Spec for KaplaPhysics (human-owned)
@@ -415,5 +416,54 @@ example : (coreCheck {} { KaplaCore.HumanModel.default with hands := 1 } 200
     ⟨[{ blocks := [KaplaCore.Pose.example, ⟨.flat, .id, ⟨0, 0, 3 / 2⟩⟩] }]⟩).ok ≠ true :=
   fun hok => absurd ((coreCheck_ok_sound _ _ _ _ hok).1 _ (List.mem_singleton_self _)).2
     (by decide)
+
+/-! ## A person's own rules
+
+Meaning of the rules: `specs/KaplaSpecs/PhysicsRules/UserRules.lean`. -/
+
+/-- The engine's check of a person's rule says yes exactly when the rule holds for the
+blocks. -/
+theorem checkRule_iff (r : KaplaCore.UserRule) (ps : List KaplaCore.Pose) :
+    checkRule r ps = true ↔ RuleHolds r ps := by
+  sorry
+
+-- The check says yes for "no block higher than 3" on a stack 3 tall.
+example : checkRule (.maxHeight 3) flatStack3 = true := by decide +kernel
+-- Ruled out: yes for "fits in 14 × 3" on blocks 15 long.
+example : ¬ RuleHolds (.fitsIn 14 3) flatStack3 := by decide +kernel
+
+/-- A rule that holds for all the blocks also holds for the first `k` of them. So when the
+finished plan keeps a rule, the build keeps it after every step. -/
+theorem ruleHolds_take (r : KaplaCore.UserRule) (ps : List KaplaCore.Pose) (k : Nat)
+    (h : RuleHolds r ps) : RuleHolds r (ps.take k) := by
+  sorry
+
+-- Every hypothesis can hold: the stack keeps "at most 3 flat blocks".
+example : RuleHolds (.maxUpright .flat 3) flatStack3 := by decide +kernel
+-- The other way round is not claimed: the first two blocks keep "at most 2 flat blocks",
+-- all three do not.
+example : RuleHolds (.maxUpright .flat 2) (flatStack3.take 2) ∧
+    ¬ RuleHolds (.maxUpright .flat 2) flatStack3 := by decide +kernel
+
+/-- When the engine with a person's extra rules says `ok`: the plain engine (`coreCheck`, with
+the same options and builder) also says `ok`, so `coreCheck_ok_sound` applies; the report
+promises the same (`assurance`); and every extra rule holds after every step. -/
+theorem coreCheckWith_ok_sound (opts : PlanOptions) (rules : List KaplaCore.UserRule)
+    (h : KaplaCore.HumanModel) (maxBlocks : Nat) (plan : KaplaCore.BuildPlan)
+    (hok : (coreCheckWith opts rules h maxBlocks plan).ok = true) :
+    (coreCheck opts h maxBlocks plan).ok = true ∧
+      (coreCheckWith opts rules h maxBlocks plan).assurance =
+        (coreCheck opts h maxBlocks plan).assurance ∧
+      KeepsRulesThroughout rules plan.blocks := by
+  sorry
+
+-- One flat block on the ground, with the rule "no block higher than 1": the engine says `ok`.
+example : (coreCheckWith {} [.maxHeight 1] .default 200
+    ⟨[{ blocks := [KaplaCore.Pose.example] }]⟩).ok = true := by decide +kernel
+-- Ruled out: `ok` for that block with the rule "no block higher than 1/2".
+example : (coreCheckWith {} [.maxHeight (1 / 2)] .default 200
+    ⟨[{ blocks := [KaplaCore.Pose.example] }]⟩).ok ≠ true := fun hok =>
+  absurd ((coreCheckWith_ok_sound _ _ _ _ _ hok).2.2 1 _ (List.mem_singleton_self _))
+    (by decide +kernel)
 
 end KaplaPhysics
