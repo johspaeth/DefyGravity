@@ -155,7 +155,7 @@ def siteJs : String := "
     proposalHeight = KaplaViewer.readNumber(score.height);
     KaplaViewer.showPlan(model, proposalHeight, p.view);
     badges.textContent = '';
-    badges.append(!p.stands ? badge('Does not stand', 'bad') : p.assurance === 'robust' ? badge('Stands, with 3.9 mm errors', 'ok') : badge('Stands as planned, no 3.9 mm check', 'warn'));
+    badges.append(!p.stands ? badge('Does not stand', 'bad') : p.assurance === 'robust' ? badge('Stands, even 3.9 mm off', 'ok') : badge('Stands as planned (not checked for errors)', 'warn'));
     if (p.hardToReach) badges.append(badge('May be hard to reach', 'warn'));
     badges.append(badge(score.accepted ? 'Accepted' : 'Not accepted', score.accepted ? 'ok' : 'bad'));
     scores.textContent = `Score ${score.scoreRounded} (${score.verdict}). Height ${(+proposalHeight.toFixed(2))} blocks, ${score.blockCount} blocks used. Target cells with no block: ${score.missing}. Block cells outside the target: ${score.extra}.`;

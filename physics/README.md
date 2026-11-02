@@ -171,7 +171,7 @@ R5 only removes some of these errors, so "solid" here implies solid under R5.
   is not a quarter turn gets the `nominal` check, for its straight blocks too. Placement
   errors, gaps, tight slots and reach are not checked. Adding one far-away turned block makes
   E3 `ok`, which is refused on its own. E4, which really falls, is still refused. The website
-  shows "Stands as planned, no 3.9 mm check" for these plans. `--robust-only` refuses them.
+  shows "Stands as planned (not checked for errors)" for these plans. `--robust-only` refuses them.
   The real fix is a placement-error check for turned planks.
 - **Some safe builds are refused.** R6 does not leave out planks that touch only at a corner,
   so a 2 × 2 floor of flat planks is refused, even if their neighbours would line them up.
