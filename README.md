@@ -100,6 +100,12 @@ export ANTHROPIC_API_KEY=...    # or this
 Also needed: `curl` (every call to Claude), and internet in the browser (the 3D view loads
 three.js). The gallery's "Open a PR" button needs `git` and a logged-in `gh`.
 
+## Built and kept
+
+[`lab/`](lab/README.md) is the preserved set of 21 hand-built requests, each using at most 200 planks. It includes the 200-plank tower and the 200-plank duck on one leg in a tree. The plans, per-step results, and blueprints are there so anyone can point at them, fork this repo, and keep hacking.
+
+These are recorded experiments, not gallery entries and not extra proofs. Six of the 21 passed the full plan check at 2 mm when recorded, against main at `446591f`. The other 15 are kept too, with the checker's result on each step. Rerun them with `lake build kaplalab`. That build is not part of CI, and it does not change the checker.
+
 ## Layout: one folder per component
 
 | Folder | Lean library | What it does | Owner | May import |

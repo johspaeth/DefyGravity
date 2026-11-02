@@ -4,6 +4,8 @@ Goal: turn requests like "Papa, I want a Kapla duck that stands on one leg, in a
 
 This folder is not a component. It imports `KaplaPhysics`, changes nothing in `core/`, `physics/`, `specs/` or `comparator/`, and is not in `defaultTargets`, so CI does not build it.
 
+It is on `main` as the stable copy of these 21 designs. Fork the repo and change them here. A saved result is not a fresh proof: the numbers in `results/` were recorded against main at `446591f`.
+
 ## Run it
 
 ```sh
