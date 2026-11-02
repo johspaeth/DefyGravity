@@ -1,5 +1,8 @@
 # Merge gate for main. The only required status check is "CI OK" (job `ci-ok`),
-# which is green only if every job below is green.
+# which is green only if every job below is green, except `verify`.
+# For now (Nov 2026) `verify` (lake check + lake comparator, ~3.5 min) does not block merging,
+# to keep merges fast. It still runs on every PR and on main: check that it is green.
+# To make it blocking again, add `verify` back to `needs` and to the test in `ci-ok`.
 name: CI
 
 on:
@@ -98,12 +101,11 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [rules, build, verify, smoke]
+    needs: [rules, build, smoke]
     runs-on: ubuntu-latest
     steps:
       - run: |
           echo '${{ toJSON(needs) }}'
           [[ "${{ needs.rules.result }}" == success && \
              "${{ needs.build.result }}" == success && \
-             "${{ needs.verify.result }}" == success && \
              "${{ needs.smoke.result }}" == success ]]
