@@ -19,7 +19,7 @@ import KaplaWeb
   runs a planner strategy (default `empty`) on a bubble model (default: the egg), with the
   verified physics engine and the verified scorer, and shows its plan. `--out` writes the
   plan as a blueprint for `kapla view`. The strategies `ai` and `ai-unchecked` call
-  Claude and need `ANTHROPIC_API_KEY`. `--effort` (`low`, `medium` or `high`, default `high`)
+  Claude and need `ANTHROPIC_API_KEY` (from `.env` in the top folder, or the shell). `--effort` (`low`, `medium` or `high`, default `high`)
   sets how much Claude thinks: lower is faster, and fewer designs pass.
 
 * `kapla serve [--port N]` starts the website on this computer only (default port 8000). Run it
@@ -288,9 +288,11 @@ def blueprintJson (title : String) (target : KaplaCore.TargetSpec) (c : KaplaCor
     , ("plan", Json.mkObj [("steps", Json.arr (c.plan.steps.map fun st =>
         Json.mkObj [("blocks", Json.arr (st.blocks.map pose).toArray)]).toArray)]) ]
 
-/-- Run a planner strategy on a target and list its candidates. -/
-def plan (name : String) (effort : KaplaPlanner.Claude.Effort) (blocks : Nat)
-    (targetFile out : Option String) : IO UInt32 := do
+/-- Run a planner strategy on a target and list its candidates. The physics engine and the
+scorer run here again on each candidate, so what is printed never comes from the planner's
+own report (a planner can return any report it likes). -/
+def plan (opts : KaplaPhysics.PlanOptions) (name : String) (effort : KaplaPlanner.Claude.Effort)
+    (blocks : Nat) (targetFile out : Option String) : IO UInt32 := do
   match KaplaPlanner.strategyWithEffort? name effort with
   | none =>
     IO.eprintln s!"unknown strategy \"{name}\"; known: {KaplaPlanner.strategies.map (·.name)}"
@@ -308,10 +310,11 @@ def plan (name : String) (effort : KaplaPlanner.Claude.Effort) (blocks : Nat)
     let effortNote := if KaplaPlanner.usesClaude s.name then s!" (effort {effort.name})" else ""
     IO.println s!"strategy {s.name}{effortNote}: {cands.length} candidates"
     for c in cands do
-      let physics := if c.physics.ok then "physics ok (verified)"
-        else if c.physics.diagnostics.isEmpty then "physics not checked"
-        else "physics not ok"
-      IO.println s!"  {c.plan.blockCount} blocks, height {KaplaPlanner.showQ c.score.height}, score {KaplaPlanner.showScore c.score.score}, {physics}"
+      let physics := runPhysics opts blocks c.plan
+      let score := KaplaSemantics.semanticEngine.score target c.score.height c.plan.blocks
+      IO.println s!"  {c.plan.blockCount} blocks, height {KaplaPlanner.showQ score.height}, score {KaplaPlanner.showScore score.score}, {if score.accepted then "accepted" else "not accepted"}"
+      for line in physicsLines opts c.plan physics do
+        IO.println s!"    {line}"
     match out, cands with
     | some path, c :: _ =>
       if let some dir := (System.FilePath.mk path).parent then IO.FS.createDirAll dir
@@ -471,7 +474,8 @@ def exampleEntry : Entry :=
     Json.mkObj [("center", Json.arr #[0, 0, 1])]])]])])).toOption.isNone
 
 /-- The physics and the score of a plan, for the page: `view` (blocks and steps for the viewer), `score`,
-`stands`, `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
+`stands`, `assurance` (`"robust"`: also for 3.9 mm placement errors; `"nominal"`: at the planned
+positions only), `hardToReach` (some step got the reach warning), `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
 physics engine and the scorer run here, so none of this comes from the planner or from a file. -/
 def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String Json := do
   let opts : KaplaPhysics.PlanOptions := {}
@@ -482,6 +486,8 @@ def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String
     [ ("view", view)
     , ("score", KaplaSemantics.reportToJson score)
     , ("stands", Json.bool physics.ok)
+    , ("assurance", Json.str (match physics.assurance with | .robust => "robust" | .nominal => "nominal"))
+    , ("hardToReach", Json.bool (physics.diagnostics.any fun | .unreachable _ => true | _ => false))
     , ("physics", Json.arr ((physicsLines opts p.plan physics).map Json.str).toArray)
     , ("saved", savedPlanToJson p) ]
 
@@ -490,24 +496,57 @@ def getGallery : IO Reply := do
   let names ← listEntries
   return { json := (Json.mkObj [("entries", Json.arr (names.map Json.str).toArray)]).compress }
 
-/-- Read the gallery file with this name, or give the reply that says why not. -/
-def loadEntry (name : String) : IO (Except Reply Entry) := do
+/-- Read the gallery file with this name, with its text, or give the reply that says why not. -/
+def loadEntryText (name : String) : IO (Except Reply (String × Entry)) := do
   let none := Except.error (errorReply .notFound "there is no gallery entry with this name")
   if cleanName name != name || name.isEmpty then return none
   let path := entryPath name
   unless ← path.pathExists do return none
-  match readEntry (← IO.FS.readFile path) with
-  | .ok e => return .ok e
+  let text ← IO.FS.readFile path
+  match readEntry text with
+  | .ok e => return .ok (text, e)
   | .error e => return .error (errorReply .unprocessableEntity s!"the file is not a good gallery entry: {e}")
 
+/-- Read the gallery file with this name, or give the reply that says why not. -/
+def loadEntry (name : String) : IO (Except Reply Entry) :=
+  return (← loadEntryText name).map (·.2)
+
+/-- The `proposal` answers for gallery files, found by the hash of the file's text. Physics and the
+scorer take up to a few seconds on a big plan, so `kapla serve` runs them once per file. A changed file
+has a new hash, so it is checked again. -/
+abbrev ProposalCache := IO.Ref (Std.HashMap UInt64 Json)
+
+/-- The `proposal` of an entry (null if it has no plan): from the cache, or computed and kept. -/
+def entryProposal (cache : ProposalCache) (text : String) (e : Entry) : IO Json := do
+  match e.proposal with
+  | none => return Json.null
+  | some p =>
+    let key := hash text
+    if let some j := (← cache.get)[key]? then return j
+    let j ← IO.ofExcept (proposalJson (KaplaCore.TargetSpec.ofBubbles e.model) p)
+    cache.modify (·.insert key j)
+    return j
+
+/-- Run physics and the scorer on every gallery entry now, so that opening one later is fast. -/
+def checkGallery (cache : ProposalCache) : IO Unit := do
+  let names ← listEntries
+  IO.println s!"Checking the {names.length} gallery entries..."
+  (← IO.getStdout).flush
+  let start ← IO.monoMsNow
+  for name in names do
+    match ← loadEntryText name with
+    | .error _ => IO.eprintln s!"  gallery/{name}.json is not a good entry; it is left out"
+    | .ok (text, e) =>
+      try discard <| entryProposal cache text e
+      catch err => IO.eprintln s!"  gallery/{name}.json: {err}"
+  IO.println s!"Checked the gallery in {(← IO.monoMsNow) - start} ms."
+
 /-- `GET /gallery/NAME`: `name`, `model`, and `proposal` (null if the entry has no plan). -/
-def getEntry (name : String) : IO Reply := do
-  match ← loadEntry name with
+def getEntry (cache : ProposalCache) (name : String) : IO Reply := do
+  match ← loadEntryText name with
   | .error r => return r
-  | .ok e =>
-    let proposal ← match e.proposal with
-      | none => pure Json.null
-      | some p => IO.ofExcept (proposalJson (KaplaCore.TargetSpec.ofBubbles e.model) p)
+  | .ok (text, e) =>
+    let proposal ← entryProposal cache text e
     return { json := (Json.mkObj [("name", Json.str name), ("model", KaplaSemantics.modelToJson e.model),
                                   ("proposal", proposal)]).compress }
 
@@ -608,9 +647,6 @@ def fromOurPage (port : Nat) (host origin : Option String) : Bool :=
 #guard !fromOurPage 8000 (some "example.com") none
 #guard !fromOurPage 8000 none none
 
-/-- The file that holds the API key, from the top folder of the repo. -/
-def keyFile : System.FilePath := "semantics" / "dev" / ".env"
-
 /-- `GET /status`: does the server have a key? The key itself never leaves the server. -/
 def getStatus (key : Option String) : Reply :=
   { json := (Json.mkObj [("key", Json.bool key.isSome)]).compress }
@@ -620,7 +656,7 @@ null). The answer is `reply` and `model`; `model` is null when Claude only answe
 def postChat (key : Option String) (body : String) : IO Reply := do
   let some key := key
     | return errorReply .serviceUnavailable
-        "The API key is missing. Put it in semantics/dev/.env or set ANTHROPIC_API_KEY, then start kapla serve again."
+        "The API key is missing. Put it in .env in the top folder of the repo, or set ANTHROPIC_API_KEY, then start kapla serve again."
   let parsed : Except String (String × List KaplaSemantics.ChatMessage × Option KaplaCore.BubbleModel) := do
     let j ← KaplaSemantics.parseJson body
     let text ← (← j.getObjVal? "text").getStr?
@@ -728,10 +764,11 @@ section Server
 open Std Async
 open Std Http Server
 
-/-- The website: its port, and the API key if there is one. -/
+/-- The website: its port, the API key if there is one, and the checked gallery entries. -/
 structure Site where
   port : Nat
   key : Option String
+  cache : ProposalCache
 
 /-- Send a reply as JSON. A browser must not keep an old list of models. -/
 def sendJson (r : Reply) : ContextAsync (Response Body.Any) :=
@@ -775,7 +812,7 @@ instance : Handler Site where
     else if method == .post && path.startsWith "/gallery/" && path.endsWith "/pr" then
       guarded (postPullRequest ((path.drop "/gallery/".length).dropEnd "/pr".length).toString)
     else if method == .get && path.startsWith "/gallery/" then
-      guarded (getEntry (path.drop "/gallery/".length).toString)
+      guarded (getEntry site.cache (path.drop "/gallery/".length).toString)
     else if method == .post && path == "/gallery" then
       try
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
@@ -790,24 +827,16 @@ def serve (port : Nat) : IO UInt32 := do
   unless ← galleryDir.isDir do
     IO.eprintln "No gallery/ folder here. Run this from the top folder of the repo."
     return 1
-  -- The key in semantics/dev/.env wins. Without one, use ANTHROPIC_API_KEY from the shell, so a
-  -- fresh checkout or worktree needs no .env file.
-  let shellKey := (← IO.getEnv "ANTHROPIC_API_KEY").filter (!·.trimAscii.isEmpty)
-  let key := (← KaplaSemantics.loadApiKey keyFile) <|> shellKey
-  -- The AI planners read the key from the environment, and Lean cannot change the environment of a
-  -- running program. So start this program again once, with the key set.
-  if let some k := key then
-    if (← IO.getEnv "ANTHROPIC_API_KEY") != some k then
-      let child ← IO.Process.spawn
-        { cmd := ← IO.appPath |>.map toString, args := #["serve", "--port", toString port]
-          env := #[("ANTHROPIC_API_KEY", some k)] }
-      return ← child.wait
+  -- `main` has already put the key from .env here, if there is one.
+  let key := (← IO.getEnv "ANTHROPIC_API_KEY").filter (!·.trimAscii.isEmpty)
   if key.isNone then
-    IO.println "No API key in semantics/dev/.env or in ANTHROPIC_API_KEY, so the chat will not work. The rest of the site does."
+    IO.println "No API key in .env or in ANTHROPIC_API_KEY, so the chat will not work. The rest of the site does."
+  let cache ← IO.mkRef {}
+  checkGallery cache
   try
     Async.block do
       let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, port.toUInt16⟩
-      let server ← Server.serve addr (Site.mk port key)
+      let server ← Server.serve addr (Site.mk port key cache)
       IO.println s!"Defy Gravity is running. Open http://localhost:{port}"
       (← IO.getStdout).flush
       server.waitShutdown
@@ -845,7 +874,22 @@ def usage : String :=
   "       kapla serve [--port N]\n" ++
   "       kapla gallery-check"
 
+/-- The one file that holds the API key: `.env` in the top folder of the repo. Only `main` reads it. -/
+def keyFile : System.FilePath := ".env"
+
+/-- Put the key from `.env` into `ANTHROPIC_API_KEY`, for every part of the program that calls
+Claude. Lean cannot change the environment of a running program, so when the key is not there yet,
+run this program again once, with the key set, and give back its exit code. `none`: go on, the
+environment is already right. The key in `.env` wins over one from the shell. -/
+def useKeyFile (args : List String) : IO (Option UInt32) := do
+  let some k ← KaplaSemantics.loadApiKey keyFile | return none
+  if (← IO.getEnv "ANTHROPIC_API_KEY") == some k then return none
+  let child ← IO.Process.spawn
+    { cmd := (← IO.appPath).toString, args := args.toArray, env := #[("ANTHROPIC_API_KEY", some k)] }
+  return some (← child.wait)
+
 def main (args : List String) : IO UInt32 := do
+  if let some code ← useKeyFile args then return code
   let opts : KaplaPhysics.PlanOptions :=
     { clearance := !args.contains "--no-clearance",
       allowNominal := !args.contains "--robust-only" }
@@ -860,7 +904,7 @@ def main (args : List String) : IO UInt32 := do
   | "plan" :: rest =>
     let rec go (name : String) (effort : KaplaPlanner.Claude.Effort) (blocks : Nat)
         (target out : Option String) : List String → IO UInt32
-      | [] => plan name effort blocks target out
+      | [] => plan opts name effort blocks target out
       | "--strategy" :: n :: r => go n effort blocks target out r
       | "--effort" :: e :: r => match KaplaPlanner.Claude.Effort.ofName? e with
         | some e => go name e blocks target out r

@@ -53,16 +53,16 @@ Requests between the page and the server. Every answer is JSON, and a failure ha
 | `GET /status` | | `{"key": true or false}`: does the server have an API key? |
 | `POST /chat` | `{"text": newest message, "messages": [{"role": "user" or "assistant", "text": text}], "model": model on screen or null}` | `{"reply": text, "model": new model, or null if Claude only answered}`. 503 with no key, 502 if Claude failed |
 | `GET /planners` | | `{"planners": [names], "claude": [names]}`, from `KaplaPlanner.strategies`. The `claude` ones ask Claude and take an `effort` |
-| `POST /plan` | `{"planner": name, "blocks": block limit, "model": model on screen, "effort": "low", "medium" or "high"}` (`effort` is optional, default `"high"`; only the planners that ask Claude use it) | `{"proposal": ...}`, or null if the planner made none. A proposal has `view` (blocks and steps for the viewer), `score` (the score report), `stands`, `physics` (lines of text) and `saved` (the plan, as a gallery file keeps it). 504 if the planner takes over 15 minutes |
+| `POST /plan` | `{"planner": name, "blocks": block limit, "model": model on screen, "effort": "low", "medium" or "high"}` (`effort` is optional, default `"high"`; only the planners that ask Claude use it) | `{"proposal": ...}`, or null if the planner made none. A proposal has `view` (blocks and steps for the viewer), `score` (the score report), `stands`, `assurance` (`"robust"`: also stands with 3.9 mm placement errors; `"nominal"`: turned blocks, checked at the planned positions only), `hardToReach` (some step got the reach warning), `physics` (lines of text) and `saved` (the plan, as a gallery file keeps it). 504 if the planner takes over 15 minutes |
 | `POST /gallery` | `{"name": text, "model": model, "overwrite": true or false, "proposal": the proposal's "saved", or null}` | `{"name": clean name, "model": saved model}`. 409 with `{"name": clean name}` if the name exists and `overwrite` is not true. 400 if the name, the model or the plan is bad |
 | `POST /gallery/NAME/pr` | | `{"url": the PR}`. 503 without `gh` logged in, 502 if git or `gh` failed |
 
 A planner gives one plan. The server runs physics and the scorer on it again, so "Stands" and "Accepted"
 do not depend on what a planner says about itself. A new model on screen clears the proposal.
 
-The conversation lives only in the page. It is gone when the page closes. `kapla serve` reads the key
-from `semantics/dev/.env` when it starts, or from `ANTHROPIC_API_KEY` in the shell when the file has
-none. The file wins when both are set. The key is never sent to the page.
+The conversation lives only in the page. It is gone when the page closes. `kapla serve` gets the key
+from `.env` in the top folder of the repo, or from `ANTHROPIC_API_KEY` in the shell when there is no
+such file (see `app/README.md`). The key is never sent to the page.
 
 The server cleans the name ("My Bunny!" becomes `my-bunny`) and checks the model with `decode`. It
 answers 403 to a request that does not come from its own page, such as one from another website open
@@ -92,7 +92,7 @@ stays at height 1; `height` only sets the numbers on the axes and the sizes in t
 The page never rescales a model to fit. A broken model shows an error and no picture; the rules are
 the same as `decode` in `semantics/KaplaSemantics/Json.lean`, and Lean stays the final authority.
 
-The chat (step 7) shows a new model with one call, and the picture changes at once:
+The chat shows a new model with one call, and the picture changes at once:
 
 ```js
 KaplaViewer.show(model, 30)   // model is the parsed bubble JSON, 30 is the height

@@ -142,7 +142,7 @@ def siteJs : String := "
   // Enter sends; Shift and Enter makes a new line.
   chatText.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
   // ---------- the proposal ----------
-  const badge = (text, good) => { const b = document.createElement('span'); b.className = 'badge ' + (good ? 'ok' : 'bad'); b.textContent = text; return b; };
+  const badge = (text, kind) => { const b = document.createElement('span'); b.className = 'badge ' + kind; b.textContent = text; return b; };
   const item = (parent, text) => { const li = document.createElement('li'); li.textContent = text; parent.append(li); return li; };
   const removeBubble = label => { if (busy || !current) return;
     const smaller = {...current, bubbles: current.bubbles.filter(b => b.label !== label)};
@@ -155,7 +155,9 @@ def siteJs : String := "
     proposalHeight = KaplaViewer.readNumber(score.height);
     KaplaViewer.showPlan(model, proposalHeight, p.view);
     badges.textContent = '';
-    badges.append(badge(p.stands ? 'Stands' : 'Does not stand', p.stands), badge(score.accepted ? 'Accepted' : 'Not accepted', score.accepted));
+    badges.append(!p.stands ? badge('Does not stand', 'bad') : p.assurance === 'robust' ? badge('Stands, even 3.9 mm off', 'ok') : badge('Stands as planned (not checked for errors)', 'warn'));
+    if (p.hardToReach) badges.append(badge('May be hard to reach', 'warn'));
+    badges.append(badge(score.accepted ? 'Accepted' : 'Not accepted', score.accepted ? 'ok' : 'bad'));
     scores.textContent = `Score ${score.scoreRounded} (${score.verdict}). Height ${(+proposalHeight.toFixed(2))} blocks, ${score.blockCount} blocks used. Target cells with no block: ${score.missing}. Block cells outside the target: ${score.extra}.`;
     physicsNotes.textContent = ''; p.physics.forEach(line => item(physicsNotes, line));
     if (score.outside.length) item(physicsNotes, `Not accepted: blocks outside the target: ${score.outside.length}.`);
@@ -164,14 +166,19 @@ def siteJs : String := "
     score.tooSmall.forEach(label => { const li = item(tooSmall, `${label} is too small to build at this height.`), b = document.createElement('button');
       b.type = 'button'; b.textContent = 'Remove'; b.onclick = () => removeBubble(label); li.append(b); });
     proposal.hidden = false; };
-  generate.onclick = async () => { if (busy || !current) return; const model = current; setBusy(true);
+  generate.onclick = async () => { if (busy || !current) return; const model = current;
+    // The same rule as the server: a whole number from 1 to the box's max.
+    const blocks = Number(blocksBox.value), most = +blocksBox.max;
+    if (blocksBox.value.trim() === '' || !Number.isInteger(blocks) || blocks < 1 || blocks > most) {
+      planStatus.className = 'bad'; planStatus.textContent = `The block limit must be a whole number from 1 to ${most}.`; blocksBox.focus(); return; }
+    setBusy(true);
     const usesClaude = claudePlanners.includes(plannerBox.value);
     proposal.hidden = true; planStatus.className = '';
     planStatus.textContent = !usesClaude ? 'Working on a proposal...'
       : effort === 'low' ? 'Working on a proposal, with low reasoning. This takes about a minute...'
       : `Working on a proposal, with ${effort} reasoning. This can take several minutes...`;
     try { const r = await send('/plan', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({planner: plannerBox.value, blocks: +blocksBox.value, model, ...(usesClaude ? {effort} : {})})});
+        body: JSON.stringify({planner: plannerBox.value, blocks, model, ...(usesClaude ? {effort} : {})})});
       if (!r.ok) { planStatus.className = 'bad'; planStatus.textContent = r.body.error || 'Something went wrong.'; if (proposalHeight !== undefined) proposal.hidden = false; return; }
       if (!r.body.proposal) { clearProposal(); KaplaViewer.show(model); planStatus.textContent = 'This planner made no proposal. The terminal running kapla serve shows why.'; return; }
       planStatus.textContent = ''; showProposal(model, r.body.proposal);
@@ -181,7 +188,7 @@ def siteJs : String := "
     r.body.planners.forEach(name => { const o = document.createElement('option'); o.textContent = name; plannerBox.append(o); });
     showEffort(); }).catch(() => {});
   send('/status').then(r => { if (r.ok && !r.body.key)
-    addMsg('The API key is missing, so the chat cannot work. Put it in semantics/dev/.env or set ANTHROPIC_API_KEY, then start kapla serve again.', 'bad'); }).catch(() => {});
+    addMsg('The API key is missing, so the chat cannot work. Put it in .env in the top folder of the repo, or set ANTHROPIC_API_KEY, then start kapla serve again.', 'bad'); }).catch(() => {});
 })();
 "
 
@@ -213,7 +220,7 @@ def sitePage : String :=
 </section>
 <main>
 <div id=\"planBar\"><label>Planner <select id=\"planner\"></select></label>
-<label>Block limit <input id=\"planBlocks\" type=\"number\" min=\"1\" step=\"1\" value=\"40\"></label>
+<label>Block limit <input id=\"planBlocks\" type=\"number\" min=\"1\" max=\"200\" step=\"1\" value=\"40\"></label>
 <button id=\"generate\" type=\"button\" disabled>Generate proposal</button>
 <button id=\"effort\" type=\"button\" disabled title=\"How much Claude thinks before it answers, for the planners that ask Claude. Click for the next level. Low is fastest, and fewer of its designs pass the checks. High is slowest, and most of its designs pass.\">Reasoning: high</button>
 <span id=\"planStatus\" role=\"status\"></span></div>
