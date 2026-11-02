@@ -496,24 +496,57 @@ def getGallery : IO Reply := do
   let names ← listEntries
   return { json := (Json.mkObj [("entries", Json.arr (names.map Json.str).toArray)]).compress }
 
-/-- Read the gallery file with this name, or give the reply that says why not. -/
-def loadEntry (name : String) : IO (Except Reply Entry) := do
+/-- Read the gallery file with this name, with its text, or give the reply that says why not. -/
+def loadEntryText (name : String) : IO (Except Reply (String × Entry)) := do
   let none := Except.error (errorReply .notFound "there is no gallery entry with this name")
   if cleanName name != name || name.isEmpty then return none
   let path := entryPath name
   unless ← path.pathExists do return none
-  match readEntry (← IO.FS.readFile path) with
-  | .ok e => return .ok e
+  let text ← IO.FS.readFile path
+  match readEntry text with
+  | .ok e => return .ok (text, e)
   | .error e => return .error (errorReply .unprocessableEntity s!"the file is not a good gallery entry: {e}")
 
+/-- Read the gallery file with this name, or give the reply that says why not. -/
+def loadEntry (name : String) : IO (Except Reply Entry) :=
+  return (← loadEntryText name).map (·.2)
+
+/-- The `proposal` answers for gallery files, found by the hash of the file's text. Physics and the
+scorer take up to a few seconds on a big plan, so `kapla serve` runs them once per file. A changed file
+has a new hash, so it is checked again. -/
+abbrev ProposalCache := IO.Ref (Std.HashMap UInt64 Json)
+
+/-- The `proposal` of an entry (null if it has no plan): from the cache, or computed and kept. -/
+def entryProposal (cache : ProposalCache) (text : String) (e : Entry) : IO Json := do
+  match e.proposal with
+  | none => return Json.null
+  | some p =>
+    let key := hash text
+    if let some j := (← cache.get)[key]? then return j
+    let j ← IO.ofExcept (proposalJson (KaplaCore.TargetSpec.ofBubbles e.model) p)
+    cache.modify (·.insert key j)
+    return j
+
+/-- Run physics and the scorer on every gallery entry now, so that opening one later is fast. -/
+def checkGallery (cache : ProposalCache) : IO Unit := do
+  let names ← listEntries
+  IO.println s!"Checking the {names.length} gallery entries..."
+  (← IO.getStdout).flush
+  let start ← IO.monoMsNow
+  for name in names do
+    match ← loadEntryText name with
+    | .error _ => IO.eprintln s!"  gallery/{name}.json is not a good entry; it is left out"
+    | .ok (text, e) =>
+      try discard <| entryProposal cache text e
+      catch err => IO.eprintln s!"  gallery/{name}.json: {err}"
+  IO.println s!"Checked the gallery in {(← IO.monoMsNow) - start} ms."
+
 /-- `GET /gallery/NAME`: `name`, `model`, and `proposal` (null if the entry has no plan). -/
-def getEntry (name : String) : IO Reply := do
-  match ← loadEntry name with
+def getEntry (cache : ProposalCache) (name : String) : IO Reply := do
+  match ← loadEntryText name with
   | .error r => return r
-  | .ok e =>
-    let proposal ← match e.proposal with
-      | none => pure Json.null
-      | some p => IO.ofExcept (proposalJson (KaplaCore.TargetSpec.ofBubbles e.model) p)
+  | .ok (text, e) =>
+    let proposal ← entryProposal cache text e
     return { json := (Json.mkObj [("name", Json.str name), ("model", KaplaSemantics.modelToJson e.model),
                                   ("proposal", proposal)]).compress }
 
@@ -739,10 +772,11 @@ section Server
 open Std Async
 open Std Http Server
 
-/-- The website: its port, and the API key if there is one. -/
+/-- The website: its port, the API key if there is one, and the checked gallery entries. -/
 structure Site where
   port : Nat
   key : Option String
+  cache : ProposalCache
 
 /-- Send a reply as JSON. A browser must not keep an old list of models. -/
 def sendJson (r : Reply) : ContextAsync (Response Body.Any) :=
@@ -786,7 +820,7 @@ instance : Handler Site where
     else if method == .post && path.startsWith "/gallery/" && path.endsWith "/pr" then
       guarded (postPullRequest ((path.drop "/gallery/".length).dropEnd "/pr".length).toString)
     else if method == .get && path.startsWith "/gallery/" then
-      guarded (getEntry (path.drop "/gallery/".length).toString)
+      guarded (getEntry site.cache (path.drop "/gallery/".length).toString)
     else if method == .post && path == "/gallery" then
       try
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
@@ -805,10 +839,12 @@ def serve (port : Nat) : IO UInt32 := do
   let key := (← IO.getEnv "ANTHROPIC_API_KEY").filter (!·.trimAscii.isEmpty)
   if key.isNone then
     IO.println "No API key in .env or in ANTHROPIC_API_KEY, so the chat will not work. The rest of the site does."
+  let cache ← IO.mkRef {}
+  checkGallery cache
   try
     Async.block do
       let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, port.toUInt16⟩
-      let server ← Server.serve addr (Site.mk port key)
+      let server ← Server.serve addr (Site.mk port key cache)
       IO.println s!"Defy Gravity is running. Open http://localhost:{port}"
       (← IO.getStdout).flush
       server.waitShutdown
