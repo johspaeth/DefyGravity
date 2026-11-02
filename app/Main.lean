@@ -308,9 +308,12 @@ def plan (name : String) (effort : KaplaPlanner.Claude.Effort) (blocks : Nat)
     let effortNote := if KaplaPlanner.usesClaude s.name then s!" (effort {effort.name})" else ""
     IO.println s!"strategy {s.name}{effortNote}: {cands.length} candidates"
     for c in cands do
-      let physics := if c.physics.ok then "physics ok (verified)"
-        else if c.physics.diagnostics.isEmpty then "physics not checked"
-        else "physics not ok"
+      -- Run the engine here: the report a planner returns is only the planner's word.
+      let r := runPhysics {} blocks c.plan
+      let physics := match r.ok, r.assurance with
+        | true, .robust => "physics ok (verified, with 3.9 mm placement errors)"
+        | true, .nominal => "physics ok (verified, at the planned positions only)"
+        | false, _ => "physics not ok"
       IO.println s!"  {c.plan.blockCount} blocks, height {KaplaPlanner.showQ c.score.height}, score {KaplaPlanner.showScore c.score.score}, {physics}"
     match out, cands with
     | some path, c :: _ =>
@@ -471,7 +474,8 @@ def exampleEntry : Entry :=
     Json.mkObj [("center", Json.arr #[0, 0, 1])]])]])])).toOption.isNone
 
 /-- The physics and the score of a plan, for the page: `view` (blocks and steps for the viewer), `score`,
-`stands`, `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
+`stands`, `assurance` (`robust`: checked with placement errors; `nominal`: only at the planned
+positions), `hardToReach` (some step got the reach warning), `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
 physics engine and the scorer run here, so none of this comes from the planner or from a file. -/
 def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String Json := do
   let opts : KaplaPhysics.PlanOptions := {}
@@ -482,6 +486,8 @@ def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String
     [ ("view", view)
     , ("score", KaplaSemantics.reportToJson score)
     , ("stands", Json.bool physics.ok)
+    , ("assurance", Json.str (match physics.assurance with | .robust => "robust" | .nominal => "nominal"))
+    , ("hardToReach", Json.bool (physics.diagnostics.any fun | .unreachable _ => true | _ => false))
     , ("physics", Json.arr ((physicsLines opts p.plan physics).map Json.str).toArray)
     , ("saved", savedPlanToJson p) ]
 

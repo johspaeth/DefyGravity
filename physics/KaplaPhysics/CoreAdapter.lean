@@ -91,8 +91,12 @@ def firstUnsafeBlock (ε : Rat) (b : Build) : Option Nat :=
 
 /-- `KaplaCore.PhysicsEngine.check`, done by the verified engine.
 
-`ok` is true exactly when every step places 1 to `hands` blocks, every block has a physics
-pose, and `checkPlan opts` accepts the blocks as a plan of at most `maxBlocks` planks.
+`ok` is true exactly when every step places 1 to `hands` blocks and one of these holds:
+* every block has a physics pose, and `checkPlan opts` accepts the blocks as a plan of at most
+  `maxBlocks` planks (`assurance := .robust`);
+* some block has a 15° turn that is not a quarter turn, every turn is a 15° step,
+  `opts.allowNominal` is on, and `checkTurnedPlan` accepts the blocks (`assurance := .nominal`).
+  One such block moves the whole plan to this weaker check, straight blocks too.
 
 If a block has no physics pose, or the build after a block is not shown to stand, the
 report has `unstable step block` for the first such block. The engine does not say which

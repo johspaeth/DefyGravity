@@ -92,6 +92,8 @@ what a theorem means, you must change `specs/`, which needs a spec review.
 - `stable_iff_tStable`: the two forms of F4 agree. An axis-aligned build is stable with
   pushes at the corners of its patches (`Stable`) exactly when, read as turned planks at 0°
   or 90° (`Plank.toT`), it is stable with pushes anywhere in its patches (`TStable`).
+- `turnedOf_shape`: a turned plank covers exactly the rectangle that core's turn gives the
+  block, at the same heights.
 - `checkTPushes_sound`, `checkTurnedPlan_sound` (B6): for planks turned in steps of 15°, an
   accepted plan has at most N planks and after every step is well-formed and stable at the
   planned positions. Placement errors, gaps and reach are not checked for turned plans yet.
@@ -165,6 +167,14 @@ R5 only removes some of these errors, so "solid" here implies solid under R5.
 
 ## Not done yet
 
+- **One turned block weakens the whole plan.** A plan with any block turned by a 15° step that
+  is not a quarter turn gets the `nominal` check, for its straight blocks too. Placement
+  errors, gaps, tight slots and reach are not checked. Adding one far-away turned block makes
+  E3 `ok`, which is refused on its own. E4, which really falls, is still refused. The website
+  shows "Stands as planned, no 3.9 mm check" for these plans. `--robust-only` refuses them.
+  The real fix is a placement-error check for turned planks.
+- **Some safe builds are refused.** R6 does not leave out planks that touch only at a corner,
+  so a 2 × 2 floor of flat planks is refused, even if their neighbours would line them up.
 - **Only soundness is proven.** An engine that never says "yes" would pass every theorem.
   Only the `#guard`s in `Examples.lean` show that the engine accepts good builds. A theorem
   such as `checkPlan {} ε (2 * n) (squareTower n) = true` would close this, but it means
