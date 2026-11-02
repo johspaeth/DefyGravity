@@ -1,0 +1,15 @@
+Frozen proof surface: byte-for-byte match.
+✔ [2/5] Built Kapla.Model (1.2s)
+✔ [3/5] Built Kapla.Spec (787ms)
+✔ [4/5] Built Kapla.Core (784ms)
+ℹ [5/5] Built Kapla.Proofs (882ms)
+info: Kapla/Proofs.lean:116:0: 'Kapla.landingHeight_clears' depends on axioms: [propext, Quot.sound]
+info: Kapla/Proofs.lean:117:0: 'Kapla.landingHeight_minimal' depends on axioms: [propext]
+info: Kapla/Proofs.lean:118:0: 'Kapla.vertical_path_clear' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:119:0: 'Kapla.place_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:120:0: 'Kapla.replay_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:121:0: 'Kapla.accumulate_eq_reference' depends on axioms: [propext]
+info: Kapla/Proofs.lean:122:0: 'Kapla.certificate_sound' depends on axioms: [propext, Quot.sound]
+info: Kapla/Proofs.lean:123:0: 'Kapla.certificate_complete' depends on axioms: [propext, Quot.sound]
+Build completed successfully (5 jobs).
+Exported freshly compiled frozen reference: sha256 801e7e92291a25d8c57d1a707f91241a7496d8bf9d12afb92b62ea9aa634ecd7

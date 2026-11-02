@@ -1,0 +1,3 @@
+bt100.json: 94 steps, 94 blocks
+  Physics (verified): well-formed and stands after every block, at the planned positions only (turned blocks: placement errors, gaps and reach not checked)
+exit=0

@@ -1,0 +1,3 @@
+ta200-design-r7.json: 200 steps, 200 blocks
+  Physics (verified): well-formed and solid after every block, for 3.9 mm placement errors
+exit=0

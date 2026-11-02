@@ -1,0 +1,8 @@
+{
+  "landingHeight_clears": "theorem landingHeight_clears (p : Block) (bs : List Block) :\n    Spec.ClearsAbove p bs (landingHeight p bs)",
+  "landingHeight_minimal": "theorem landingHeight_minimal (p : Block) (bs : List Block) (h : Nat)\n    (clear : Spec.ClearsAbove p bs h) : landingHeight p bs ≤ h",
+  "vertical_path_clear": "theorem vertical_path_clear (p : Block) (bs : List Block) (h : Nat)\n    (above : landingHeight p bs ≤ h) (b : Block) (hb : b ∈ bs) :\n    Spec.Separated { p with y := h } b",
+  "place_preserves_validity": "theorem place_preserves_validity (budget : Nat) (bs out : List Block) (p : Block)\n    (valid : Spec.SceneValid budget bs)\n    (accepted : place budget bs p = some out) :\n    Spec.SceneValid budget out ∧ out.length = bs.length + 1",
+  "replay_preserves_validity": "theorem replay_preserves_validity (budget : Nat) (bs actions out : List Block)\n    (valid : Spec.SceneValid budget bs)\n    (accepted : replay budget bs actions = some out) :\n    Spec.SceneValid budget out",
+  "certificate_sound": "theorem certificate_sound (budget : Nat) (bs : List Block) (cert : Certificate)\n    (accepted : checkCertificate budget bs cert = true) :\n    Spec.Equilibrium budget bs cert"
+}

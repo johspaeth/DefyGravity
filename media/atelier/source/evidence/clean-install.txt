@@ -1,0 +1,48 @@
+make: Entering directory '/home/user/workspace/kapla-clean-final.H0yhmg'
+bash scripts/install.sh
+Using Lean 4.35.0 already on PATH.
+
+added 7 packages in 1s
+✔ [2/18] Built Kapla.Model (1.4s)
+✔ [3/18] Built Kapla.Model:c.o (253ms)
+✔ [4/18] Built Kapla.Spec (931ms)
+✔ [5/18] Built Kapla.Spec:c.o (205ms)
+✔ [6/18] Built Kapla.Core (773ms)
+✔ [7/18] Built Kapla.Core:c.o (176ms)
+ℹ [8/18] Built Kapla.Proofs (1.0s)
+info: Kapla/Proofs.lean:116:0: 'Kapla.landingHeight_clears' depends on axioms: [propext, Quot.sound]
+info: Kapla/Proofs.lean:117:0: 'Kapla.landingHeight_minimal' depends on axioms: [propext]
+info: Kapla/Proofs.lean:118:0: 'Kapla.vertical_path_clear' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:119:0: 'Kapla.place_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:120:0: 'Kapla.replay_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:121:0: 'Kapla.accumulate_eq_reference' depends on axioms: [propext]
+info: Kapla/Proofs.lean:122:0: 'Kapla.certificate_sound' depends on axioms: [propext, Quot.sound]
+info: Kapla/Proofs.lean:123:0: 'Kapla.certificate_complete' depends on axioms: [propext, Quot.sound]
+✔ [9/18] Built Kapla.Presets (906ms)
+✔ [10/18] Built Kapla.Presets:c.o (175ms)
+✔ [11/18] Built Kapla.Solver (996ms)
+✔ [12/18] Built Kapla.Solver:c.o (637ms)
+ℹ [13/18] Built Kapla.Tests (1.0s)
+info: Kapla/Tests.lean:65:0: true
+info: Kapla/Tests.lean:66:0: true
+info: Kapla/Tests.lean:67:0: true
+info: Kapla/Tests.lean:68:0: true
+✔ [14/18] Built Kapla.Protocol (1.1s)
+✔ [15/18] Built Kapla.Protocol:c.o (623ms)
+✔ [16/18] Built Main (885ms)
+✔ [17/18] Built Main:c.o (154ms)
+✔ [18/18] Built kapla:exe (953ms)
+Build completed successfully (18 jobs).
+
+> kapla-atelier@0.1.0 build
+> node scripts/build.mjs
+
+
+  dist/chunks/rapier-DEFE34J7.js    2.1mb ⚠️
+  dist/app.js                     584.7kb
+
+⚡ Done in 288ms
+Workshop built. No credentials or paid APIs required.
+Installed. Run make run, then open http://localhost:8000
+For sandboxed proof replay, Linux and bubblewrap are also required: make verify
+make: Leaving directory '/home/user/workspace/kapla-clean-final.H0yhmg'

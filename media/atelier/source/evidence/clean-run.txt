@@ -1,0 +1,3 @@
+node server.mjs
+Kapla Atelier: http://localhost:8001 (Lean-authoritative)
+HTTP TESTS PASSED: startup, default scene, token and visitor isolation, reserved commands, malformed/oversized requests, methods and static files.

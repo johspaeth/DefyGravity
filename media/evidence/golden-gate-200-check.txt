@@ -1,0 +1,5 @@
+gg200-pass.json: 200 steps, 200 blocks
+  Physics (verified): well-formed and solid after every block, for 3.9 mm placement errors
+  step 180: may be hard to reach (warning only)
+  step 199: may be hard to reach (warning only)
+exit=0

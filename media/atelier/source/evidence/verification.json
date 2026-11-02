@@ -1,0 +1,43 @@
+{
+  "toolchain": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)",
+  "checkedAt": "2026-11-01T01:09:50.009Z",
+  "lakeCheck": "passed",
+  "comparator": "passed",
+  "theoremCount": 8,
+  "sandbox": "bubblewrap enabled",
+  "independentPhysicalValidation": false,
+  "specificationApproval": "Author-proposed, frozen; independent human approval pending",
+  "scope": "Actual Lean placement and static certificate checker only. Not the compiler, transport, rendering, solver completeness or moving physics.",
+  "acceptedAxioms": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound"
+  ],
+  "sources": {
+    "Kapla/Model.lean": "72eb4980fbeae38f166f1a9cc42eb0d167c6851c85660904c8d50dc8362518bd",
+    "Kapla/Spec.lean": "489659f9a3e9def4e6611e1eb600f19298dd07192a4693962b863d5ed86061d1",
+    "Kapla/Core.lean": "61aecea944fa16ee40fef35d07d45d857c79121348b0dbcdaa66495b0261492c",
+    "Kapla/Proofs.lean": "fa8ca7f82462b4983c165dd91a88995fab0399f857a57f34856a8cff6c2eaafb",
+    "Kapla/Solver.lean": "1752d42c7c55ffff78d285658567223e8c9a83ef183f4b96365da527c45862de",
+    "Kapla/Presets.lean": "a45aa7418b4fe5fe7dd388f52bb622db4e71134f33f5bd36e33519f464402d35",
+    "Kapla/Protocol.lean": "6878024fa824fb9806a25b460493770afcf8ef26ecb3b3f308ecafde856380cc",
+    "Kapla/Tests.lean": "694404840f18ecc725da677ba62140e5cc1a1f835019a9154d65f9577c306fdc",
+    "Main.lean": "0317d0b709229c0dd87e1fbd5df00f6a380f6694ec1cc6536cbb7fcca2a801ff",
+    "comparator.json": "02c7f43dcfa80e4230ca091ea122d1825d9d9c5142b2d9409cea0fa5c1e647b8"
+  },
+  "frozenReference": {
+    "compiledAt": "2026-11-01T01:09:47.716Z",
+    "file": ".lake/frozen-reference.ndjson",
+    "sha256": "801e7e92291a25d8c57d1a707f91241a7496d8bf9d12afb92b62ea9aa634ecd7",
+    "reference": "trusted/reference/Kapla/Proofs.lean",
+    "toolchain": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)",
+    "sourceHashes": {
+      "trusted/reference/Kapla/Model.lean": "72eb4980fbeae38f166f1a9cc42eb0d167c6851c85660904c8d50dc8362518bd",
+      "trusted/reference/Kapla/Spec.lean": "489659f9a3e9def4e6611e1eb600f19298dd07192a4693962b863d5ed86061d1",
+      "trusted/reference/Kapla/Core.lean": "61aecea944fa16ee40fef35d07d45d857c79121348b0dbcdaa66495b0261492c",
+      "trusted/reference/Kapla/Proofs.lean": "fa8ca7f82462b4983c165dd91a88995fab0399f857a57f34856a8cff6c2eaafb",
+      "trusted/reference/lean-toolchain": "ca5f1f601d34c49079e38d7e7041eb0f2a9c227fbc1df0f404820069a052330c",
+      "trusted/reference/lakefile.toml": "a6690c9c5c27d3e234b80bdf07350fb7ae66a2e4ea226ce25fcfd3b35099c8f0"
+    }
+  }
+}

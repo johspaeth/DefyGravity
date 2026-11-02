@@ -1,0 +1,8 @@
+'Kapla.landingHeight_clears' depends on axioms: [propext, Quot.sound]
+'Kapla.landingHeight_minimal' depends on axioms: [propext]
+'Kapla.vertical_path_clear' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Kapla.place_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Kapla.replay_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Kapla.accumulate_eq_reference' depends on axioms: [propext]
+'Kapla.certificate_sound' depends on axioms: [propext, Quot.sound]
+'Kapla.certificate_complete' depends on axioms: [propext, Quot.sound]

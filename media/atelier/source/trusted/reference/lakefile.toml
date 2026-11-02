@@ -1,0 +1,6 @@
+name = "kapla_frozen_reference"
+version = "0.1.0"
+defaultTargets = ["Kapla.Proofs"]
+
+[[lean_lib]]
+name = "Kapla"

@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-11-01T02:23:13.437Z",
+  "passed": true,
+  "checks": [
+    "Hosted theorem 1 interactive check passed",
+    "Hosted theorem 2 interactive check passed",
+    "Hosted theorem 3 interactive check passed",
+    "Hosted theorem 4 interactive check passed",
+    "Hosted theorem 5 interactive check passed",
+    "Hosted theorem 6 interactive check passed",
+    "Hosted construction preserved",
+    "Hosted real JSON export and Lean-checked reimport",
+    "Hosted entry from physics/instructions and Escape with slider focus",
+    "Hosted short-window tour controls and certificate tamper/restore",
+    "Hosted mobile exact statement, scrolling and no horizontal overflow"
+  ],
+  "pageErrors": [],
+  "boundary": "Hosted UI and real Lean API flows tested. No new formal theorem or performance guarantee."
+}

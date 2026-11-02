@@ -1,0 +1,20 @@
+PASS default tower, exact force and moment differential check
+PASS tower preset, expected certification, export/import
+PASS bridge preset, expected certification, export/import
+PASS domino preset, expected certification, export/import
+PASS overhang preset, expected certification, export/import
+PASS empty preset, expected certification, export/import
+PASS all six orientations, preview exactly equals accepted placement
+PASS invalid coordinates and orientations rejected without mutations
+PASS remove support, invalidate certificate, preserve honest snapshot round-trip, reject false path claim
+PASS inventory enforced on placement and presets, with no silent empty fallback
+PASS undo restores canonical scene
+PASS negative, zero-scale, dangling, out-of-face, altered and missing force certificates rejected
+PASS import rejects duplicate IDs, overlap, insufficient inventory and model mismatch
+PASS tower: every released prefix certified and sampled instructions checked
+PASS bridge: every released prefix certified and sampled instructions checked
+PASS domino: every released prefix certified and sampled instructions checked
+PASS independent in-memory sessions
+PASS 120 seeded legal additions; runtime geometry and accepted certificates differentially checked
+PASS unknown operation fails closed without state change
+ALL TESTS PASSED (19 scenario groups)

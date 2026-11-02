@@ -1,0 +1,11 @@
+{
+  "frozenAt": "2026-11-01T00:27:30.585Z",
+  "status": "author-proposed; human review pending",
+  "hashes": {
+    "Kapla/Model.lean": "72eb4980fbeae38f166f1a9cc42eb0d167c6851c85660904c8d50dc8362518bd",
+    "Kapla/Spec.lean": "489659f9a3e9def4e6611e1eb600f19298dd07192a4693962b863d5ed86061d1",
+    "Kapla/Core.lean": "61aecea944fa16ee40fef35d07d45d857c79121348b0dbcdaa66495b0261492c",
+    "Kapla/Proofs.lean": "fa8ca7f82462b4983c165dd91a88995fab0399f857a57f34856a8cff6c2eaafb",
+    "trusted/Challenge.lean": "69c1f1e91626159a935b15db289dae71b5823a4175cfa3150b2ae88da3fbf4ce"
+  }
+}

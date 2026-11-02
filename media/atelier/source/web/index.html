@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f8f7f2">
+  <meta name="description" content="A little wooden world. Build with exact Lean-checked planks, find your balance, then let gravity have a go.">
+  <title>Kapla Atelier · A little wooden world</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700,800&f[]=switzer@400,500,600,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+  <script>window.__API_BASE__ = '__PORT_8000__';</script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <a class="wordmark" href="./" aria-label="Kapla Atelier home">kapla<span class="wordmark-divider"></span><span class="atelier">atelier</span></a>
+    <span class="tagline">A little wooden world. Yours to make.</span>
+    <nav class="header-actions" aria-label="Workshop actions">
+      <button id="sound-btn" class="icon-button" title="Turn sound on" aria-label="Turn sound on" aria-pressed="false"><i data-lucide="volume-x"></i></button>
+      <button id="help-btn" class="icon-button" title="How to play" aria-label="How to play"><i data-lucide="circle-help"></i></button>
+      <button id="tour-open" class="button quiet" aria-label="Explore six theorems in 3D" disabled><span class="tour-open-long">Proof tour</span><span class="tour-open-short">Proofs</span></button>
+      <span class="header-divider"></span>
+      <button id="save-btn" class="button quiet" disabled><i data-lucide="download"></i><span>Save build</span></button>
+    </nav>
+  </header>
+
+  <main id="stage" aria-label="Interactive three-dimensional plank workshop">
+    <canvas id="workshop" aria-label="3D workshop. Drag to orbit. Use Add plank then arrow keys and Enter to build." tabindex="0"></canvas>
+    <div class="stage-top">
+      <div class="scene-heading">
+        <div class="eyebrow"><span class="live-dot"></span> YOUR WORKSHOP</div>
+        <h1 id="scene-title">Sky tower</h1>
+        <p id="scene-subtitle">Small pieces. Tall possibilities.</p>
+      </div>
+      <div class="mode-switch" role="group" aria-label="Workshop mode">
+        <button id="build-mode" class="active" aria-pressed="true"><i data-lucide="blocks"></i> Build</button>
+        <button id="play-mode" aria-pressed="false" disabled><i data-lucide="play"></i> Play</button>
+      </div>
+    </div>
+
+    <div class="tool-rail" role="group" aria-label="Building tools">
+      <button id="tool-view" class="tool active" title="Explore · V" aria-label="Explore and orbit" aria-pressed="true"><i data-lucide="mouse-pointer-2"></i><span>Explore</span></button>
+      <button id="tool-place" class="tool" title="Add plank · B" aria-label="Add plank" aria-pressed="false" disabled><i data-lucide="plus"></i><span>Add plank</span></button>
+      <button id="tool-remove" class="tool" title="Remove plank · X" aria-label="Remove plank" aria-pressed="false" disabled><i data-lucide="eraser"></i><span>Remove</span></button>
+      <span class="rail-divider"></span>
+      <button id="undo-btn" class="tool" title="Undo · Ctrl Z" aria-label="Undo last edit" disabled><i data-lucide="undo-2"></i><span>Undo</span></button>
+    </div>
+
+    <section class="inspector" aria-label="Build information">
+      <div class="inspector-kicker"><span class="tiny-plank"></span> THE BUILD</div>
+      <div class="build-stats">
+        <div><strong id="block-count">72</strong><span id="block-unit">planks</span></div>
+        <div><strong id="build-height">28.8<span> cm</span></strong><span>height</span></div>
+      </div>
+      <div class="inventory"><div><span id="inventory-fill"></span></div><span id="inventory-label">128 left in the box</span></div>
+      <button id="certificate-btn" class="certificate" disabled>
+        <span class="certificate-icon"><i data-lucide="shield-check"></i></span>
+        <span><strong id="certificate-title">Connecting to Lean</strong><small id="certificate-caption">Your build is checked here.</small></span>
+        <i data-lucide="chevron-right"></i>
+      </button>
+      <button id="forces-btn" class="text-button" aria-pressed="false" disabled><i data-lucide="route"></i><span>See the load paths</span><span class="mini-toggle"></span></button>
+      <div class="inspector-bottom">
+        <button id="gravity-btn" class="button primary" disabled><i data-lucide="play" class="play-icon"></i><span>Test gravity</span><i data-lucide="arrow-up-right"></i></button>
+        <span class="soft-note">The best part? You can always rebuild.</span>
+      </div>
+    </section>
+
+    <section id="placement-panel" class="placement-panel glass" aria-label="Plank controls" hidden>
+      <span class="eyebrow">ONE PLANK, SIX WAYS</span>
+      <div class="pose-selector" role="group" aria-label="Plank pose">
+        <button data-pose="0" class="active" aria-pressed="true"><span class="pose-shape flat"></span>Flat</button>
+        <button data-pose="2" aria-pressed="false"><span class="pose-shape edge"></span>On edge</button>
+        <button data-pose="4" aria-pressed="false"><span class="pose-shape tall"></span>Upright</button>
+      </div>
+      <div class="placement-actions"><button id="rotate-btn" class="text-button"><i data-lucide="rotate-cw"></i>Rotate <kbd>R</kbd></button><button id="place-btn" class="button small primary">Place <kbd>↵</kbd></button></div>
+      <span id="placement-coordinates" class="coordinates">Point at the table to place</span>
+      <button id="placement-status" class="placement-status" aria-label="Inspect the current build certificate"></button>
+    </section>
+
+    <div id="play-toolbar" class="play-toolbar glass" role="group" aria-label="Physics playground" hidden>
+      <div class="play-label"><span class="live-dot"></span> GRAVITY PLAYGROUND <small>Illustrative physics, not a proof</small></div>
+      <div class="play-actions">
+        <button id="pause-btn" class="button" aria-label="Pause physics"><i data-lucide="pause"></i><span>Pause</span></button>
+        <button id="nudge-btn" class="button"><i data-lucide="hand"></i><span>Nudge</span></button>
+        <button id="quake-btn" class="button"><i data-lucide="waves"></i><span>Earthquake</span></button>
+        <button id="slow-btn" class="button" aria-pressed="false"><i data-lucide="timer"></i><span>Slow-mo</span></button>
+        <button id="rebuild-btn" class="button primary"><i data-lucide="rotate-ccw"></i><span>Rebuild</span></button>
+      </div>
+    </div>
+
+    <section id="steps-panel" class="steps-panel glass" aria-label="Construction sequence" hidden>
+      <div class="steps-heading"><span class="eyebrow">ONE STEP AT A TIME</span><button id="steps-close" class="icon-button" aria-label="Close construction sequence"><i data-lucide="x"></i></button></div>
+      <div class="steps-controls"><button id="step-prev" class="icon-button" aria-label="Previous construction step"><i data-lucide="skip-back"></i></button><button id="step-play" class="icon-button" aria-label="Play construction sequence"><i data-lucide="play"></i></button><input id="step-range" type="range" min="0" max="72" value="72" aria-label="Construction step"><button id="step-next" class="icon-button" aria-label="Next construction step"><i data-lucide="skip-forward"></i></button><span id="step-number">72 / 72</span></div>
+      <p id="step-description">All planks in place.</p>
+      <button id="check-plan-btn" class="text-button"><i data-lucide="list-checks"></i><span>Check the balance of every step</span></button>
+      <span id="plan-result" role="status"></span>
+    </section>
+
+    <div class="stage-bottom">
+      <div id="debug-hud" class="debug-hud" aria-label="Rendering performance">Starting renderer</div>
+      <div id="interaction-hint" class="interaction-hint"><i data-lucide="move"></i><span>Drag to orbit</span><span class="hint-dot"></span><i data-lucide="mouse"></i><span>Scroll to zoom</span></div>
+      <div class="camera-tools">
+        <button id="steps-btn" class="icon-button" title="Replay the build" aria-label="Replay construction sequence" disabled><i data-lucide="list-video"></i></button>
+        <span></span>
+        <button id="zoom-in-btn" class="icon-button" title="Zoom in" aria-label="Zoom in"><i data-lucide="plus"></i></button>
+        <button id="zoom-out-btn" class="icon-button" title="Zoom out" aria-label="Zoom out"><i data-lucide="minus"></i></button>
+        <button id="reset-camera-btn" class="icon-button" title="Fit the build · C" aria-label="Fit build in camera"><i data-lucide="scan"></i></button>
+      </div>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <div id="loading" class="loading-overlay">
+      <img src="./assets/atelier-cover.png" alt="An illustrated wooden tower and bridge on a sunlit green tabletop">
+      <div class="loading-content"><span class="eyebrow">WELCOME TO THE ATELIER</span><h2>Make a little<br>room for play.</h2><p id="loading-message">Opening your plank box and starting Lean…</p><span class="loading-line"></span><button id="retry-btn" class="button primary" hidden>Try again</button></div>
+    </div>
+    <noscript><div class="fatal">This workshop needs JavaScript and WebGL 2. The Lean source is included in the project.</div></noscript>
+  </main>
+
+  <section id="proof-tour" aria-label="Six theorems in 3D" hidden></section>
+  <section class="blueprints" aria-label="Starter blueprints">
+    <div class="shelf-label"><span class="eyebrow">A LITTLE INSPIRATION</span><h2>What will you build?</h2></div>
+    <div class="preset-list">
+      <button class="preset active" data-preset="tower" aria-pressed="true" disabled><span class="preset-art" data-mini="tower" aria-hidden="true"></span><span><strong>Sky tower</strong><small>Reach a little higher</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+      <button class="preset" data-preset="bridge" aria-pressed="false" disabled><span class="preset-art" data-mini="bridge" aria-hidden="true"></span><span><strong>Little bridge</strong><small>Bring two sides together</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+      <button class="preset" data-preset="domino" aria-pressed="false" disabled><span class="preset-art" data-mini="domino" aria-hidden="true"></span><span><strong>Domino garden</strong><small>One tiny push…</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+      <button class="preset" data-preset="overhang" aria-pressed="false" disabled><span class="preset-art" data-mini="overhang" aria-hidden="true"></span><span><strong>The tipping point</strong><small>Find the edge of balance</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+    </div>
+    <button id="new-btn" class="new-build" disabled><i data-lucide="plus"></i><span>Start fresh</span></button>
+  </section>
+  <footer class="footer">
+    <span>No glue. No nails. Just possibility.</span>
+    <button id="proof-footer" class="engine-label"><span class="live-dot" id="engine-dot"></span><span id="engine-status">Connecting to Lean 4.35.0</span><i data-lucide="arrow-up-right"></i></button>
+    <button id="import-btn" class="footer-import"><i data-lucide="upload"></i>Open a build</button>
+  </footer>
+</div>
+<input id="import-file" type="file" accept=".json,application/json" hidden>
+
+<dialog id="help-dialog" class="dialog help-dialog" aria-labelledby="help-title">
+  <button class="dialog-close icon-button" data-close="help-dialog" aria-label="Close help"><i data-lucide="x"></i></button>
+  <img class="help-art" src="./assets/atelier-cover.png" alt="Pine plank tower and bridge illustration">
+  <div class="dialog-content">
+    <span class="eyebrow">A FEW SMALL THINGS</span><h2 id="help-title">Welcome to your<br>happy building place.</h2>
+    <p>One identical plank. Six ways to turn it. As many ideas as you can fit on the table.</p>
+    <ol class="how-to">
+      <li><span>01</span><div><strong>Make it yours.</strong><p>Choose Add plank, point at the table, and click. Lean lowers the piece to its first contact. Rotate with R.</p></div></li>
+      <li><span>02</span><div><strong>Find your balance.</strong><p>Inspect the load paths or replay your build one plank at a time. A checked certificate means vertical loads balance in our ideal model.</p></div></li>
+      <li><span>03</span><div><strong>Enjoy the little collapse.</strong><p>Test gravity, give it a nudge, or try an earthquake. Rebuild brings your original construction back.</p></div></li>
+    </ol>
+    <details><summary>Keyboard shortcuts</summary><div class="shortcut-grid"><span><kbd>B</kbd> Add plank</span><span><kbd>V</kbd> Explore</span><span><kbd>X</kbd> Remove</span><span><kbd>R</kbd> Rotate</span><span><kbd>T</kbd> Change pose</span><span><kbd>↵</kbd> Place plank</span><span><kbd>↑ ↓ ← →</kbd> Move preview</span><span><kbd>Ctrl Z</kbd> Undo</span><span><kbd>C</kbd> Fit camera</span><span><kbd>Space</kbd> Pause physics</span></div></details>
+    <p class="fineprint">Illustrations are atmospheric, not construction records. This is an unofficial, independent plank-building toy, not a KAPLA product.</p>
+    <button class="button primary" data-close="help-dialog">Let's make something<i data-lucide="arrow-right"></i></button>
+  </div>
+</dialog>
+
+<dialog id="proof-dialog" class="dialog proof-dialog" aria-labelledby="proof-title">
+  <div class="dialog-content">
+    <button class="dialog-close icon-button" data-close="proof-dialog" aria-label="Close proof details"><i data-lucide="x"></i></button>
+    <span class="eyebrow">A LITTLE MATH UNDER THE WOOD</span>
+    <h2 id="proof-title">Beautifully simple.<br>Precisely checked.</h2>
+    <p>The scene record and its checker run in Lean 4.35.0. The pretty pixels are not the evidence.</p>
+    <button id="tour-from-proof" class="button primary">Explore six theorems in 3D<i data-lucide="arrow-right"></i></button>
+    <div id="proof-scene-status" class="proof-callout"></div>
+    <button id="proof-forces-btn" class="button quiet" aria-pressed="false" disabled>Inspect the load paths</button>
+    <div class="proof-grid">
+      <section><i data-lucide="boxes"></i><h3>Place without overlap.</h3><p>A legal drop preserves disjoint interiors, unique IDs, and inventory. Its whole straight-down insertion path is clear.</p></section>
+      <section><i data-lucide="scale"></i><h3>Account for every load.</h3><p>Accepted certificates use nonnegative contact forces and exact integer arithmetic. Each plank balances vertical force and both first moments.</p></section>
+    </div>
+    <div class="boundary-note"><strong>What this does not prove</strong><p>Real-world safety, friction, bending, sideways stability, resistance to a bump, or Rapier's moving simulation. The certificate solver can miss a valid witness; “not certified” does not mean “impossible.”</p></div>
+    <div id="verification-status" class="verification-status">Loading the build verification report…</div>
+    <p class="fineprint">The author-proposed specification is frozen for comparison, not independently approved by an organizer. The compiler, runtime, JSON bridge, browser rendering, and physics remain outside the proof.</p>
+    <div class="proof-links"><a href="./proof/SPECIFICATION.md" target="_blank" rel="noopener">Read the specification<i data-lucide="arrow-up-right"></i></a><a href="./proof/comparator.txt" target="_blank" rel="noopener">Comparator log<i data-lucide="arrow-up-right"></i></a><a href="./proof/lake-check.txt" target="_blank" rel="noopener">Kernel replay<i data-lucide="arrow-up-right"></i></a></div>
+  </div>
+</dialog>
+</body>
+</html>

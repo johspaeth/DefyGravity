@@ -1,0 +1,12 @@
+{
+  "packagedAt": "2026-11-01T00:39:11.390Z",
+  "originalFreezeUnchanged": true,
+  "reason": "Preserve module boundaries and generated match-helper names. No definition, proposition, hypothesis, theorem, proof, or permitted axiom was changed.",
+  "transformation": "Only import Kapla.* is changed to import Challenge.* in byte-verified frozen files.",
+  "hashes": {
+    "trusted/Challenge/Model.lean": "72eb4980fbeae38f166f1a9cc42eb0d167c6851c85660904c8d50dc8362518bd",
+    "trusted/Challenge/Spec.lean": "71ed4668e30d1101baff6269029e6e2307093beffd36df03896c383f4940d946",
+    "trusted/Challenge/Core.lean": "b92595817703846d0f65eb7cf49ecaebae85ca2bbefd990f3374f11a359d1601",
+    "trusted/Challenge/Proofs.lean": "8f766d2f45584f8632c222f4819eb9e4f4ee8fc24f8e892a6418134dba62bb45"
+  }
+}
