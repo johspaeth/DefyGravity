@@ -1,5 +1,16 @@
 # KaplaBuilder: Design Plan
 
+> **This is the original design, written before the build.** Some parts were built as
+> planned, some differently, some not at all. Each section says which. What is built and
+> proven today: [README.md](../README.md). The physics rules as built:
+> [spec/physics-rules.md](../spec/physics-rules.md). Main differences:
+> - Blocks turn only about the vertical axis, in 15° steps. No tilted blocks, no roofs (§3, §4).
+> - Placement error is rule R1 (each block within 3.9 mm of its own planned spot); errors
+>   that add up from level to level are not covered (§2.2).
+> - The target is a bubble model from a chat, not a Shape DSL; there is no image input (§5).
+> - The planner is Claude, checked by the verified physics engine (§6).
+> - The score is covered / (target + extra), with proven checks and a proven 0–1 range (§5).
+
 Goal: take a description or picture plus a block count N, and produce a **verified** Kapla
 blueprint that **a real person can actually build**. Such a blueprint uses at most N blocks.
 It stays standing after every build step, **even when the builder's hands are imprecise**.
@@ -10,6 +21,9 @@ Lean 4.
 ---
 
 ## 1. Core idea: untrusted generator, verified checker
+
+> **Built as planned, except:** the checker's theorem is `coreCheck_ok_sound`, not `Valid`;
+> the scorer's theorems are in `semantics/` (see its README); there is no image input.
 
 ```
  description / image ──► [Frontend: Claude] ──► TargetShape                 (untrusted)
@@ -37,17 +51,21 @@ produce a blueprint that collapses, or one that a human cannot build.
 Many structures stand in theory but cannot be built in practice. Each failure below gets
 an explicit rule in the verified spec:
 
-| # | Failure in real life | Example | Rule (verified) |
-|---|---|---|---|
-| H1 | **Knife-edge balance**: works only when placed perfectly | an overhang exactly at the tipping point | robust equilibrium under placement error ε (§2.2) |
-| H2 | **Accumulated drift**: errors add up over many layers | a 60-layer tower whose top is more than one block thickness off, or a bridge between two tall pillars that no longer line up | per-contact relative error + absolute drift cap (§2.2) |
-| H3 | **Order-dependent stability** | a cantilever that only stands once its counterweight is on | every build step is checked, never only the final state |
-| H4 | **The press of placing** | the hand presses the new block down and the overhang below tips | an extra load case: press force P at any point of the new block (§2.3) |
-| H5 | **Unreachable placement** | a block that must go into a closed pocket, or under an overhang | hand access check: the block plus fingers can be lowered or slid into place (§2.4) |
-| H6 | **Tight fits** | a gap that is exactly one block wide | no near-misses: gaps are either 0 (blocks touch by design) or at least the clearance c |
-| H7 | **Needs more hands than a person has** | A-frame rafters that only stand as a pair | a step places at most `hands` blocks at once (default 2) |
-| H8 | **Uneven parallel supports**: a block resting on two separate stacks rocks if their real heights differ | a bridge over pillars built from different block mixes | equal-composition rule for parallel support paths (§2.5) |
-| H9 | **Leaning blocks slide** | roof rafters that slip on smooth wood | friction with a safety margin (μ_safe < μ_real), plus margin on the friction cone (§3) |
+The last column says what the built system does. **Proven** means a theorem in
+`specs/KaplaSpecs/Physics.lean` that passes Comparator covers it (for plans without turned
+blocks; turned blocks are checked at the planned positions only).
+
+| # | Failure in real life | Example | Planned rule | Built |
+|---|---|---|---|---|
+| H1 | **Knife-edge balance**: works only when placed perfectly | an overhang exactly at the tipping point | robust equilibrium under placement error ε (§2.2) | **Proven** (R1, ε = 3.9 mm, `coreCheck_ok_sound`) |
+| H2 | **Accumulated drift**: errors add up over many layers | a 60-layer tower whose top is more than one block thickness off, or a bridge between two tall pillars that no longer line up | per-contact relative error + absolute drift cap (§2.2) | **Not covered**: each block's error is measured from its own planned spot |
+| H3 | **Order-dependent stability** | a cantilever that only stands once its counterweight is on | every build step is checked, never only the final state | **Proven**: checked after every block |
+| H4 | **The press of placing** | the hand presses the new block down and the overhang below tips | not modelled: builders set blocks down without pressing (§2.3) | **Not modelled** (assumption) |
+| H5 | **Unreachable placement** | a block that must go into a closed pocket, or under an overhang | hand access check: the block plus fingers can be lowered or slid into place (§2.4) | **Warning only** ("may be hard to reach"; `reachDir_sound` proves the warning's test) |
+| H6 | **Tight fits** | a gap that is exactly one block wide | no near-misses: gaps are either 0 (blocks touch by design) or at least 2ε, and no block is dropped into a slot exactly its own width (`InTightSlot`) | **Proven** (on by default; `--no-clearance` turns it off) |
+| H7 | **Needs more hands than a person has** | A-frame rafters that only stand as a pair | a step places at most `hands` blocks at once (default 1) | **Proven** |
+| H8 | **Uneven parallel supports**: a block resting on two separate stacks rocks if their real heights differ | a bridge over pillars built from different block mixes | equal-composition rule for parallel support paths (§2.5) | **Not modelled** |
+| H9 | **Leaning blocks slide** | roof rafters that slip on smooth wood | friction with a safety margin (μ_safe < μ_real), plus margin on the friction cone (§3) | **Does not arise**: no block leans, so friction is never needed (`stable_withFriction`) |
 
 ### 2.1 HumanModel parameters
 
@@ -56,16 +74,15 @@ structure HumanModel where
   εrel   : ℚ    -- max error of any corner of a block, measured against the block(s) it rests on
   eabs   : ℚ    -- max drift from the plan (the builder corrects anything larger by eye)
   θtilt  : ℚ    -- max angular error of a leaning block (as a rational tangent)
-  press  : ℚ    -- downward press while placing, in block weights
   hands  : Nat  -- max blocks placed in one step
   clear  : ℚ    -- minimum gap between blocks that don't touch by design
   μsafe  : ℚ    -- friction coefficient assumed (wood on wood is about 0.4–0.5 in reality)
   grip   : GripModel
 ```
 
-| εrel | eabs | press | hands | μsafe |
-|---|---|---|---|---|
-| 10/39 | 50/39 | 0.5 | 2 | 0.3 |
+| εrel | eabs | hands | μsafe |
+|---|---|---|---|
+| 1/2 | 50/39 | 1 | 0.3 |
 
 The defaults are educated guesses. Milestone M10 **calibrates them on real builds**: build
 test structures, measure the actual placement errors, and see what collapses.
@@ -126,13 +143,11 @@ careful builder can stack Kapla very high.
 perturbations and re-checks each one exactly. This test is not part of the proof. It catches
 mistakes in the spec and supports the calibration in M10.
 
-### 2.3 Placement press (H4)
+### 2.3 Placement press (H4): not modelled
 
-At each step k, the structure must stay robustly stable with an extra downward load
-`press` acting anywhere on the top of the newly placed block(s). For each prefix, the set
-of loads that still allow equilibrium is convex. Checking the **corners of the top face**
-therefore covers every point in between (a lemma: the loads that work form a convex set).
-That is about 4 extra certificates per step.
+We assume the builder sets each block down and lets go, without pressing on it. A press
+load case would reject many overhangs that real builders place without trouble, so we
+leave it out.
 
 ### 2.4 Hand access (H5, H6, H7)
 
@@ -204,7 +219,6 @@ def Valid (H : HumanModel) (N : Nat) (steps : List Step) : Prop :=
   ∀ k < steps.length,
     let pre := (steps.take (k+1)).join
     RobustStable H pre [] ∧
-    (∀ p ∈ topCorners steps[k], RobustStable H pre [press H p]) ∧
     Reachable H (steps.take k).join steps[k]
 
 theorem certify_sound : certify H N steps certs = some bp → Valid H N bp.val
@@ -216,6 +230,8 @@ soundness path.
 ---
 
 ## 4. Roofs (requested by Christian)
+
+> **Not built.** Roofs need tilted blocks, and blocks only turn about the vertical axis.
 
 Roofs are the main reason for allowing tilted blocks. The tilt support (M3) is therefore
 now **core** rather than a stretch goal. The roof motifs are:
@@ -235,7 +251,7 @@ How the motifs are used:
 - The planner chooses the pitch from a small table of rational angles near the target
   slope. It then solves exactly for the touching positions of the rafter ends, which are
   rational.
-- Every roof is passed through the full checker: robustness, press load cases, hand access,
+- Every roof is passed through the full checker: robustness, hand access,
   and friction with μsafe.
 - The checker's diagnostics feed back to the planner, for example "rafter 7 slides: add a
   stopper / steepen the pitch / add a collar block".
@@ -246,6 +262,10 @@ use. Claude's shape output already distinguishes roofs from walls.
 ---
 
 ## 5. Target and similarity metric
+
+> **Built differently.** The target is a bubble model (ellipsoids) from a chat, not a Shape
+> DSL. The score is covered / (target + extra), not IoU. No image input.
+> As built: [semantics/README.md](../semantics/README.md), [semantics/APPROACH.md](../semantics/APPROACH.md).
 
 - **Shape DSL** (JSON, produced by Claude or written by hand). It offers box, cylinder,
   cone, pyramid, wedge and prism shapes. They can be combined with union and difference,
@@ -271,28 +291,25 @@ use. Claude's shape output already distinguishes roofs from walls.
 
 ## 6. Components
 
-> Team split, interfaces and Mermaid diagrams: see [WORKSPLIT.md](WORKSPLIT.md).
+> **Planned module names; the built layout is the folder table in [README.md](../README.md#layout-one-folder-per-component).**
+> `Valid`, `certify`, `certify_sound` and `robust_sound` were not built under these names:
+> the main physics theorem is `coreCheck_ok_sound`. Team split: [WORKSPLIT.md](WORKSPLIT.md).
 
 | Module | Trust | Contents |
 |---|---|---|
 | `Kapla.Geometry` | ✅ verified | rational unit vectors, Pythagorean rotations (2D yaw, then 3D), convex polygons, clipping, shrinking, 3D separating-axis test, swept prisms, contact detection, centre of mass, voxel cap K_h. Untrusted helper: Stern–Brocot search for the closest Pythagorean angle. |
-| `Kapla.Physics` | ✅ verified | contacts, friction pyramid, `Equilibrium`, `RobustStable`, the press load cases, and the robust-certificate checker with `robust_sound` |
+| `Kapla.Physics` | ✅ verified | contacts, friction pyramid, `Equilibrium`, `RobustStable`, and the robust-certificate checker with `robust_sound` |
 | `Kapla.Human` | ✅ verified | `HumanModel`, `Admissible` perturbations, `Reachable` (grip and approach), `Clearance`, `ParallelSupportsOK` |
 | `Kapla.Blueprint` | ✅ verified | `Step`, `Valid`, `certify`, `certify_sound` |
 | `Kapla.Target` | ✅ core / untrusted JSON | Shape DSL, its meaning, voxelizer and correctness proof |
 | `Kapla.Score` | ✅ verified | IoU, silhouette, acceptance checks, verdict |
 | `Kapla.LP` | untrusted | Float solve → rationalize → exact check, with an exact rational simplex as fallback. Warm-started across steps. Also produces margins and shift budgets. |
 | `Kapla.Planner` | untrusted | scale search; motifs (log-cabin tower, round-tower ring, spiral, wall, slab, arch, tree, **roofs §4**); layer planner; budget knapsack; repair loop driven by diagnostics; exhaustive search for N ≤ 4 |
-| `Kapla.Sequencer` | untrusted | build order, grouping into steps (1–2 blocks), grip and approach choice, grouping steps into phases |
+| `Kapla.Sequencer` | untrusted | build order, grouping into steps (1 to `hands` blocks, default 1), grip and approach choice, grouping steps into phases |
 | `Kapla.Frontend` | untrusted | Claude Messages API through `curl` (`ANTHROPIC_API_KEY`): text or image → Shape DSL, with validation and at most 2 retries; prose narration of the verified report |
 | `Kapla.Render` | untrusted | **Lean-generated webpage**: a three.js 3D view (pinned CDN version) with a step slider; step cards with top-down SVG, offsets, angles, **grip and approach hints**, and a "two hands" badge; feasibility, difficulty and verified badges; a print-ready booklet; `kapla serve` |
 
-CLI:
-```
-kapla build --blocks 200 --prompt "Neuschwanstein" [--image ref.png] [--eps 10/39] [--out out/]
-kapla check blueprint.json
-kapla serve --port 8080
-```
+CLI as built: [app/README.md](../app/README.md).
 
 Trusted base: the Lean kernel, Lean core (and Batteries, if used), the **spec files** (`Physics/Spec`, `Human/Spec`,
 `Geometry` definitions, `Score` definitions), and the Lean compiler. The parameters of
@@ -303,11 +320,13 @@ proven.
 
 ## 7. Milestones
 
+> The original plan. What was reached: README.md, "What the plan guarantees".
+
 | # | Deliverable | Verified |
 |---|---|---|
 | M0 | Lake project on Lean 4.35 (core only, **no Mathlib**), CI (`lake build`, axiom audit, no `sorry`) | — |
 | M1 | Yaw-only geometry, nominal equilibrium checker with `checkEquilibrium_sound`; examples include a stack, a rotated stack and a rejected overhang | ✅ |
-| M2 | **Human Model I**: robust certificates (relative error, drift cap, shift budgets) with `robust_sound`; press load cases; build steps; hand access; clearance; parallel supports | ✅ |
+| M2 | **Human Model I**: robust certificates (relative error, drift cap, shift budgets) with `robust_sound`; build steps; hand access; clearance; parallel supports | ✅ |
 | M3 | **Tilted blocks + friction** in the nominal checker; roof motifs (stepped, leaning-rafter gable, tipi); two-hand steps | ✅ (nominal + margins enforced) |
 | M4 | Shape DSL, voxelizer, IoU, acceptance checks, verdict, difficulty rating | ✅ |
 | M5 | Planner v1 (exhaustive search for small N, towers, walls, layers, scale search) + LP certificate generation | output ✅ |
@@ -323,7 +342,7 @@ proven.
 |---|---|
 | LLM frontend | ✅ Claude, outside the trusted base |
 | Viewer | ✅ webpage generated by Lean |
-| Tolerance | ✅ HumanModel: εrel = 10/39 from each block's own planned spot (R1); eabs not used by the verified engine (§2.2) |
-| Rotations | ✅ any rotation about the vertical axis from M1; tilted blocks for roofs in M3 (core) |
-| Real-world buildability | ✅ H1–H9 are part of the verified `Valid` spec |
+| Tolerance | ✅ HumanModel: εrel = 1/2 from each block's own planned spot (R1); eabs not used by the verified engine (§2.2) |
+| Rotations | ✅ turns about the vertical axis in 15° steps (rule B6); tilted blocks not built |
+| Real-world buildability | ✅ H1, H3, H6, H7 proven; H5 a warning; H2, H4, H8 not covered; H9 does not arise (§2 table) |
 | Toolchain | ✅ Lean 4.35, pinned. **No Mathlib**: core Lean (which includes `Rat`) plus Batteries if needed. Proofs must pass `lake comparator` (Linux CI). |

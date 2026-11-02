@@ -7,17 +7,22 @@ Owner: all (stewarded by D). Scope: see [docs/WORKSPLIT.md](../docs/WORKSPLIT.md
 - May import: Lean core and Batteries only.
 - Rules and CI: see the [README](../README.md).
 
-## Contents (v0.1 draft)
+## Contents
 
 | File | What |
 |---|---|
 | `Basic.lean` | `Q` (= `Rat`), `Q3`, `Box` |
-| `Bubble.lean` | `Bubble`, `BubbleModel`, `contains`, `wellFormed`, `Frame`, `place`, the egg example |
+| `Bubble.lean` | `Bubble`, `BubbleModel`, `contains`, `wellFormed`, `place` (takes a height), the egg example |
 | `Block.lean` | block size, `Upright`, `Rot` (exact turn about the vertical axis), `Pose`, corners, bounding box |
 | `Plan.lean` | `Grip`, `Approach`, `Step`, `BuildPlan`, `HumanModel` and its default |
-| `Target.lean` | `Shape` (first version, owned by B), `PartTag` (kind + box), `TargetSpec`, `TargetSpec.ofBubbles`, `Request` |
+| `Target.lean` | `PartTag` (kind + box), `TargetSpec`, `TargetSpec.ofBubbles`, `Request` |
 | `Report.lean` | `Diagnostic`, `PhysicsReport`, `ScoreReport` with `accepted`, `Verdict`, `Difficulty` |
 | `Engine.lean` | `PhysicsEngine`, `SemanticEngine`, `Planner`, `PlanRequest`, `Candidate` |
-| `Mocks.lean` | `physicsMock` (load over support, every step), `semanticMock` (cell count for bubbles, volume IoU for other shapes): simple, unverified stand-ins for development |
+| `Mocks.lean` | `physicsMock` (load over support, every step), `semanticMock` (cell count): simple, unverified stand-ins. **Tests only**: the app uses the real engines (`KaplaPhysics.physicsEngine`, `KaplaSemantics.semanticEngine`). |
 
-Not yet: JSON codecs, tilted poses.
+The JSON readers live in the components that own the format (`app/Main.lean` for blueprints,
+`KaplaSemantics.Json` for models). Blocks turn only about the vertical axis; tilted
+(leaning) poses are not supported.
+
+The one core spec, `Q3.add_comm` (`specs/KaplaSpecs/Core.lean`, `comparator/core.json`), is
+small on purpose: it is the worked example of the spec → proof → comparator pattern.

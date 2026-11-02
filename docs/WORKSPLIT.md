@@ -1,5 +1,8 @@
 # KaplaBuilder: Component Split for a Team of Four
 
+> **Team working notes**, kept for history. Not needed to understand or judge the project.
+> What is built and proven: [README.md](../README.md).
+
 This document splits the system described in [DESIGN.md](DESIGN.md) into **four independent
 components**, one per person. They share **one small contract package**, `KaplaCore`. Every
 team codes only against `KaplaCore` (types, JSON formats, interfaces, mocks), so nobody is
@@ -138,7 +141,6 @@ classDiagram
   class HumanModel {
     +Q epsRel
     +Q eAbs
-    +Q press
     +Nat hands
     +Q clear
     +Q muSafe
@@ -158,7 +160,6 @@ classDiagram
     <<enumeration>>
     Unstable(step, block)
     Slides(step, contact)
-    PressTips(step, corner)
     Unreachable(step)
     Overlap(i, j)
     Clearance(i, j)
@@ -336,8 +337,7 @@ between the teams.
 - **Owns**: contact detection (polygons, segments, points), polygon clipping and shrinking,
   3D separating-axis tests, the LP solver that generates force certificates, the robust
   certificates (margins, shift budgets), the friction pyramid for tilted blocks, and the
-  Human Model rules H1–H9 (`Reachable`, `Clearance`, `ParallelSupportsOK`, press load
-  cases).
+  Human Model rules H1–H9 (`Reachable`, `Clearance`, `ParallelSupportsOK`).
 - **Delivers**: `PhysicsEngine` implementation, `certify`, `Valid`, `certify_sound`,
   `robust_sound`.
 - **Does not care about**: what the structure is supposed to look like.
