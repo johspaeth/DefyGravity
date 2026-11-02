@@ -85,6 +85,7 @@ All commands and flags: [app/README.md](app/README.md). File formats: [web/READM
 make install   # needs elan; builds everything with Lean 4.35 (pinned in lean-toolchain)
 make run       # starts the website on http://localhost:8000
 make check     # what CI checks (except `lake check` / `lake comparator`, Linux only)
+make smoke     # the README's commands and the website, end to end, with no API key
 ```
 
 Without an API key, the website still works: open a model from the **Gallery** and look at it
@@ -136,6 +137,16 @@ CI fails if:
 5. **`lake comparator` fails** for a file in `comparator/`: the proofs must prove exactly
    the statements in `specs/`. It runs in the same job as `lake check`, and can also be
    started on its own with the **Comparator** workflow (Actions → Comparator → Run workflow).
+
+   **For now, 4 and 5 do not block merging.** The job (**Kernel check and comparator**, about
+   3.5 minutes) still runs on every PR and on `main`, but **CI OK** does not wait for it.
+   Before you merge a change to proofs, specs or `comparator/`, check that this job is green.
+   If it is red on `main`, fix it first.
+6. **The smoke test fails** (`scripts/smoke_test.sh`, `make smoke`). On a fresh Linux
+   checkout with no build cache and no API key: `make install`, then every example in
+   `web/examples/` gets its expected verdict, and `make run` serves the page, the gallery, and
+   a plan from the stand-in planner that stands and is accepted. A new example file needs an
+   expected verdict in the script.
 
 ## How to work
 

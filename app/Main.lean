@@ -475,7 +475,7 @@ def exampleEntry : Entry :=
 
 /-- The physics and the score of a plan, for the page: `view` (blocks and steps for the viewer), `score`,
 `stands`, `assurance` (`"robust"`: also for 3.9 mm placement errors; `"nominal"`: at the planned
-positions only), `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
+positions only), `hardToReach` (some step got the reach warning), `physics` (lines of text), and `saved` (the plan as the page sends it back to save it). The
 physics engine and the scorer run here, so none of this comes from the planner or from a file. -/
 def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String Json := do
   let opts : KaplaPhysics.PlanOptions := {}
@@ -487,6 +487,7 @@ def proposalJson (target : KaplaCore.TargetSpec) (p : SavedPlan) : Except String
     , ("score", KaplaSemantics.reportToJson score)
     , ("stands", Json.bool physics.ok)
     , ("assurance", Json.str (match physics.assurance with | .robust => "robust" | .nominal => "nominal"))
+    , ("hardToReach", Json.bool (physics.diagnostics.any fun | .unreachable _ => true | _ => false))
     , ("physics", Json.arr ((physicsLines opts p.plan physics).map Json.str).toArray)
     , ("saved", savedPlanToJson p) ]
 
