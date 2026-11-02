@@ -32,7 +32,11 @@ not have to find the best plan, and physics and the scorer check every plan it r
   block cannot stand on another block. The planner uses upright blocks only on the ground. At
   start it sends 2 tiny plans to physics; if physics ever accepts them, this switches on by
   itself (`UprightRules`).
-- **Quarter turns only.** Physics rejects every other turn today.
+- **Turns.** Physics fully checks only plans with quarter turns. A plan with another 15° turn
+  (rule B6) is checked at the planned positions only (`assurance := .nominal`), and much more
+  slowly: about 2 s for 21 blocks, 35 s for 41, 190 s for 61, against 1–2 s for a grid plan.
+  So the search stays on the grid, and turned blocks are added to its best plans afterwards
+  (§4a).
 - **Above 40 blocks, physics uses only its fast solver**, which settles one block at a time
   from the top. The planner then builds in *strict mode*: no load on an overhang.
 - **A physics check is slow and cannot be stopped.** It runs in its own task; the planner does
@@ -41,7 +45,7 @@ not have to find the best plan, and physics and the scorer check every plan it r
 ## 3. The algorithm
 
 ```
-plan(model, N, timeLimit = 30 s):
+plan(model, N, timeLimit = 30 s, turnWait = 45 s):
   rules  ← 2 probe plans to physics          -- may upright blocks stand on / carry blocks?
   strict ← N > 40
 
@@ -60,9 +64,15 @@ plan(model, N, timeLimit = 30 s):
     at ⅓ and ⅔ of the time: stop the worse half of the searches (keep at least 4)
     after 60 % of the time: heuristic phase on
     run every live search for a few steps, in parallel
+    when the best plan that passed physics gets better (≤ 40 blocks, ≤ 2 at once):
+      start turnPass + physics check on it, in the background        -- §4a
 
-  -- 3. Result
-  plans that passed physics: the best of each height first, then the others
+  -- 3. Turned blocks
+  start turnPass + physics check on the final best plan, if not done yet
+  wait for the turned checks, at most 45 s more
+
+  -- 4. Result
+  plans that passed physics: the best of each height and the best turned plans first, then the others
   score the best maxCandidates with the scorer; return them, accepted plans first, by score
 
 search step (one search, at one height):
@@ -121,6 +131,37 @@ A cheap load model, stricter than physics, so few physics checks fail (`Support.
 - Loads are worked out on a fine grid (1/1024 for positions, 1/4096 for forces), so the
   numbers stay short.
 
+## 4a. Turned blocks
+
+`Turned.lean`. A **turned block** lies flat, turned by 15°, 30°, …, 165° (not 90°), with its
+centre on a cell middle or a cell corner and its bottom on a course. On the ground it may also
+lie on its long edge. The cells whose middle it holds (the scorer's rule, `Pose.contains`) are
+one pattern per turn, moved by whole cells, so it is scored exactly like a grid block.
+
+It rests on the ground or on flat grid blocks, and carries nothing. Its local rule:
+
+- no overlap with any block (the exact rectangle test the physics engine uses);
+- its contact patches with the blocks below are found exactly (one rectangle clipped by the
+  other). Its weight goes down right below its centre if that is inside one patch, else it is
+  shared by three load points around the centre. Load points are patch corners pulled a
+  quarter of the way to the patch's middle;
+- the grid blocks below still stand, by §4, with these extra loads.
+
+**The turned pass** (`turnPass`) is greedy: add the turned block that raises the score most
+(covered cells − score × outside cells, plus a bonus for a first bubble), until none raises it
+or the block limit is reached. It is run on the plan as it is, and with 1, 2 or 3 grid blocks
+that carry nothing removed first (the ones whose loss costs least), to make room under the
+limit. The best result wins if it beats the plan.
+
+**When it runs** (`runSearch`): each time the best plan that passed physics gets better, if it
+has at most `turnMaxBlocks` (40) blocks, a background task runs the turned pass and the physics
+check (at most `turnTasks` at once). After the time limit the final best plan gets one too, and
+the planner waits at most `turnWaitMs` (45 s) more for them. A physics check cannot be stopped,
+so a pass starts only if its check should end by then: the time is guessed as `m⁴ / 80` ms for
+`m` blocks (`turnEstimateMs`), and the guess grows when a check takes longer. If physics finds a
+turned block unstable, it is removed and the plan checked once more, if there is time for it. Turned plans that pass compete with the
+grid plans by score.
+
 ## 5. Pruning rules
 
 Safe (never drop a node that could lead to a better plan):
@@ -152,12 +193,16 @@ Heuristic (may drop good plans):
 | `heights` (tree searches) | 8 |
 | `parallelChecks` | 4 |
 | `maxTries` (safety limit) | 10⁷ |
+| `turns` (turned blocks, §4a) | on |
+| `turnMaxBlocks` | 40 |
+| `turnTasks` (turned passes at once) | 2 |
+| `turnWaitMs` (extra wait after the limit) | 45,000 |
 
 ## 7. Proved, tested, trusted
 
 - **Proved** (`Proofs.lean`): `candidatesOf_sound`: every returned plan uses at most `N` blocks
   and physics said ok. `candidatesOf_length`: at most `maxCandidates` plans. `toPlan_hands`:
-  one block per step.
+  one block per step. `candidatesOf_sound` covers plans with turned blocks too.
 - **Tested:** the fast score equals `refCounts`, a direct recount, and `deltaBlock` equals the
   cell-list version; the local rule and the tree search with the mock engines. The fast score
   was compared by hand with the real scorer (the planner may not import it).
@@ -169,11 +214,17 @@ Heuristic (may drop good plans):
 - **The fill rule can be gamed.** A floor and a lid with nothing between them fill every
   vertical line. The planner finds such plans because they score well. Should it prefer closed
   shells?
-- **Quarter turns only**, until physics accepts other turns.
+- **Turned plans get the weaker check.** Physics checks a plan with a turned block at the
+  planned positions only, so its `ok` does not cover placement errors. Turned blocks also carry
+  nothing, and stand on edge only on the ground. Turned blocks that carry others (a spiral)
+  would need loads through turned contacts in the local rule.
+- **Turned checks are slow** (§2), so plans above 40 blocks get no turned blocks, and the
+  planner takes up to 75 s in all. A faster turned check in physics would lift both limits.
+  The strategy `layered-branch-and-bound-grid` runs the same search without turned blocks: at
+  most 30 s, and every plan gets the full physics check.
 - **A running check keeps the program alive.** The planner returns on time, but a check that is
   still running keeps the process busy until it ends. Fix outside the planner: the `kapla` CLI
   exits once it has the answer, or physics gets a check with a time limit.
-- The `kapla` CLI does not call the planner yet (`app/`, owner D).
 - The theorems are not yet in `specs/` or `comparator/` (a shared change).
 
 ## 9. Files
@@ -184,6 +235,7 @@ Heuristic (may drop good plans):
 | `Table.lean` | the cell table at one height: which bubbles hold each cell, target count, column tops |
 | `FastScore.lean` | the fast score, updated one block at a time; `refCounts` for tests |
 | `Support.lean` | the local stability rule |
+| `Turned.lean` | turned blocks: plane geometry, their cells, their local rule, the turned pass |
 | `Build.lean` | candidates of a course and the greedy course builder |
 | `Tree.lean` | the tree search: bound, pruning, no-goods, backjumping, LNS, block removal |
 | `Search.lean` | the sweep, the time-limited loop over the searches, physics checks, the result; `planner` |

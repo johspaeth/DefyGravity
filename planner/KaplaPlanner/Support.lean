@@ -184,8 +184,11 @@ def roundTo (g q : Q) : Q := ((q / g + 1 / 2).floor : Q) * g
 #guard roundTo (1 / 4) (3 / 10) == 1 / 4 && roundTo (1 / 4) (2 / 5) == 1 / 2 && roundTo 1 (-3 / 2) == -1
 
 /-- Does every block stand under the load model? Returns the first block that does not, in
-build order from the top. `margin` is the room left at the ends of the contact span. -/
-def firstFailing (bs : Array Placed) (margin : Q) : Option Nat := Id.run do
+build order from the top. `margin` is the room left at the ends of the contact span. `extra`
+are loads from outside the stack (turned blocks, `Turned.lean`): block, force, and the point
+`(x, y)` where it pushes down on that block's top. -/
+def firstFailing (bs : Array Placed) (margin : Q) (extra : Array (Nat × Q × Q × Q) := #[]) :
+    Option Nat := Id.run do
   -- The loads are worked out on a fine grid, not exactly: with exact fractions, every lever
   -- split makes the numbers longer, and in a tall stack they grow to thousands of digits.
   -- Load points are rounded to `posGrid`, forces to `forceGrid` (the total load stays exact). So a load point can be off by a tiny amount
@@ -194,6 +197,11 @@ def firstFailing (bs : Array Placed) (margin : Q) : Option Nat := Id.run do
   let mut w : Array Q := Array.replicate n 1
   let mut mx : Array Q := bs.map fun p => (p.blk.x : Q) + (p.blk.sx : Q) / 2
   let mut my : Array Q := bs.map fun p => (p.blk.y : Q) + (p.blk.sy : Q) / 2
+  for (j, f, x, y) in extra do
+    if j < n then
+      w := w.modify j (· + f)
+      mx := mx.modify j (· + f * x)
+      my := my.modify j (· + f * y)
   for k in [0:n] do
     let i := n - 1 - k
     let p := bs[i]!

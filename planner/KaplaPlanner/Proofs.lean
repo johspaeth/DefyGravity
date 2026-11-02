@@ -63,14 +63,17 @@ theorem pick_length (n k : Nat) (a b : List Candidate) : (pick n k a b).length �
   omega
 
 /-- Every candidate the planner returns (`candidatesOf`, the last step of `plannerWith`)
-uses at most `N` blocks, and the physics engine said `ok` for it. -/
-theorem candidatesOf_sound (req : PlanRequest) (sem : SemanticEngine) (trees : List Tree) :
-    ∀ c ∈ candidatesOf req sem trees, c.plan.blockCount ≤ req.blocks ∧ c.physics.ok = true :=
+uses at most `N` blocks, and the physics engine said `ok` for it. This covers the plans with
+turned blocks too. -/
+theorem candidatesOf_sound (req : PlanRequest) (sem : SemanticEngine) (trees : List Tree)
+    (turned : List TurnedLeaf) :
+    ∀ c ∈ candidatesOf req sem trees turned, c.plan.blockCount ≤ req.blocks ∧ c.physics.ok = true :=
   pick_sound _ _ _ _
 
 /-- The planner returns at most `maxCandidates` candidates. -/
-theorem candidatesOf_length (req : PlanRequest) (sem : SemanticEngine) (trees : List Tree) :
-    (candidatesOf req sem trees).length ≤ req.maxCandidates :=
+theorem candidatesOf_length (req : PlanRequest) (sem : SemanticEngine) (trees : List Tree)
+    (turned : List TurnedLeaf) :
+    (candidatesOf req sem trees turned).length ≤ req.maxCandidates :=
   pick_length _ _ _ _
 
 /-- Every step of a plan made by `toPlan` places exactly one block. -/

@@ -1,4 +1,5 @@
 import KaplaPlanner.Tree
+import KaplaPlanner.Turned
 
 /-! # Search: heights, settings, the physics check, and the candidates
 
@@ -17,7 +18,14 @@ The planner (`planner`, `planner/DESIGN.md` §3) runs for at most a time limit (
    phase). At a third and two thirds of the time, the worse half of the searches stops, but at
    least 4 keep going (so the cores stay busy; each search also builds the children of a node
    in parallel).
-4. **Stop** at the time limit (less a reserve for scoring), at `maxTries`, or when nothing is
+4. **Turned blocks** (`Turned.lean`, on unless `turns` is off). When the best plan that passed
+   physics gets better, and it has at most `turnMaxBlocks` blocks, a background task adds
+   turned blocks to it (`turnPass`) and checks the result with the physics engine. At most
+   `turnTasks` run at once; after the search, the best plan gets one too. The planner waits at
+   most `turnWaitMs` more for them, since physics checks plans with turned blocks much more
+   slowly. A check cannot be stopped, so a pass starts only if its check should end by then,
+   by a guess from the block count (`turnEstimateMs`) that grows when a check takes longer. Plans that pass compete with the grid plans by score.
+5. **Stop** at the time limit (less a reserve for scoring), at `maxTries`, or when nothing is
    left to do. Checks still running are not waited for. A check cannot be stopped, and a
    program does not end before its checks do, so near the end no check starts that would
    likely run past the limit (judged by the longest check so far). The plans that passed are scored by
@@ -290,6 +298,16 @@ structure PlannerConfig where
   heights : Nat := 8
   /-- At most this many physics checks at the same time. -/
   parallelChecks : Nat := 4
+  /-- Add turned blocks to the best plans (`Turned.lean`). -/
+  turns : Bool := true
+  /-- Only plans with at most this many blocks get turned blocks. Physics checks a plan with a
+  turned block much more slowly than a grid plan: on a Mac in 2026, about 2 s for 21 blocks,
+  35 s for 41 and 190 s for 61. -/
+  turnMaxBlocks : Nat := 40
+  /-- At most this many turned passes (each with its physics check) at the same time. -/
+  turnTasks : Nat := 2
+  /-- After the time limit, wait at most this much longer for the turned passes. -/
+  turnWaitMs : Nat := 45000
   deriving Repr, Inhabited
 
 /-- Probe: a standing block in the middle of a flat block. -/
@@ -344,18 +362,89 @@ of `rest`. -/
 def pick (n k : Nat) (firsts rest : List Candidate) : List Candidate :=
   finalize n k firsts ++ finalize n (k - (finalize n k firsts).length) rest
 
-/-- The candidates from the searches: the best plan that passed physics at each height first,
-then, if there is room, the other plans that passed. The fast score equals the scorer's score,
-so plans are chosen by it first, and only the `maxCandidates` best of each group are sent to the
-semantic engine (scoring is slow for big models). -/
-def candidatesOf (req : PlanRequest) (sem : SemanticEngine) (trees : List Tree) : List Candidate :=
+/-- A plan with turned blocks that passed physics (`Turned.lean`). -/
+structure TurnedLeaf where
+  height : Nat
+  res : Turned
+  report : PhysicsReport
+  deriving Inhabited
+
+/-- The leaf-like key of a turned plan, to compare it with grid leaves. -/
+def TurnedLeaf.key (tl : TurnedLeaf) : Leaf :=
+  { blocks := tl.res.blocks.toArray, fast := tl.res.fast, covers := tl.res.covers }
+
+/-- A candidate for a turned plan that passed physics, scored by the semantic engine. -/
+def candidateOfTurned (req : PlanRequest) (sem : SemanticEngine) (tl : TurnedLeaf) : Candidate :=
+  let plan := turnedPlan tl.res.blocks tl.res.turned
+  { plan, physics := tl.report,
+    score := sem.score req.target (tl.height : Q) plan.blocks,
+    difficulty := difficultyOf plan.blockCount tl.report }
+
+/-- The candidates from the searches: the best plan that passed physics at each height, and the
+best plans with turned blocks, first; then, if there is room, the other plans that passed. The
+fast score equals the scorer's score, so plans are chosen by it first, and only the
+`maxCandidates` best of each group are sent to the semantic engine (scoring is slow for big
+models). -/
+def candidatesOf (req : PlanRequest) (sem : SemanticEngine) (trees : List Tree)
+    (turned : List TurnedLeaf := []) : List Candidate :=
   let k := req.maxCandidates
   let best (l : List (Nat × Leaf × PhysicsReport)) :=
     (l.mergeSort fun a b => a.2.1.better b.2.1).take k
   let firsts := best (trees.filterMap fun tr => tr.passed.head?.map (tr.height, ·))
   let rest := best (trees.flatMap fun tr => (tr.passed.drop 1).map (tr.height, ·))
-  pick req.blocks k (firsts.map fun (h, lf, r) => candidateOf req sem h lf r)
+  let turnedBest := (turned.mergeSort fun a b => a.key.better b.key).take k
+  pick req.blocks k
+    (turnedBest.map (candidateOfTurned req sem) ++ firsts.map fun (h, lf, r) => candidateOf req sem h lf r)
     (rest.map fun (h, lf, r) => candidateOf req sem h lf r)
+
+/-- The fast score of grid blocks with turned blocks added. -/
+def turnedScore (t : Table) (bs : List GBlock) (ts : List TBlock) : ScoreState :=
+  ts.foldl (fun s u => s.apply (delta t s u.cells.toList)) (fastScore t bs)
+
+/-- The turned pass on a leaf, then the physics check. If physics says a turned block is
+unstable, that block is removed and the plan checked once more. `none` if nothing passed. -/
+def turnAndCheck (ph : PhysicsEngine) (human : HumanModel) (n maxBlocks : Nat) (tr : Tree)
+    (lf : Leaf) (rounds : Nat := 2) : Option TurnedLeaf := Id.run do
+  let some res := turnPass tr.t n lf.blocks.toList tr.base.margin tr.base.strict tr.base.up
+    | return none
+  let mut res := res
+  for _ in [0:rounds] do
+    if res.turned.isEmpty || res.blocks.length + res.turned.length > maxBlocks then return none
+    let report := ph.check human n (turnedPlan res.blocks res.turned)
+    if report.ok then return some { height := tr.height, res, report }
+    let some b := firstUnstable report | return none
+    if b < res.blocks.length then return none
+    let turned := res.turned.eraseIdx (b - res.blocks.length)
+    let s := turnedScore tr.t res.blocks turned
+    res := { res with turned, fast := s.score tr.t, covers := tr.info.present &&& s.touched == tr.info.present }
+  return none
+
+/-- A first guess of how long physics takes to check a plan of `m` blocks with a turned block,
+in ms: about `m⁴ / 80`, from 2 s for 21 blocks and 35 s for 41 (on a Mac in 2026). The search
+raises it when a check takes longer (`turnCoef`). -/
+def turnCoef0 : Q := 1 / 80
+
+/-- The guessed time of a turned check of `m` blocks, in ms. -/
+def turnEstimateMs (coef : Q) (m : Nat) : Nat := (coef * ((m ^ 4 : Nat) : Q)).ceil.toNat
+
+-- 21 blocks: about 2.4 s; 41 blocks: about 35 s.
+#guard turnEstimateMs turnCoef0 21 == 2432 && turnEstimateMs turnCoef0 41 == 35323
+
+/-- A turned pass running in the background: its task, when it started, and the most blocks
+its plan may have. -/
+structure TurnTask where
+  task : Task (Option TurnedLeaf)
+  since : Nat
+  blocks : Nat
+  deriving Inhabited
+
+/-- The best leaf that passed physics over all searches, with its search. -/
+def bestPassed (trees : Array Tree) : Option (Nat × Leaf) :=
+  (List.range trees.size).foldl (fun acc i =>
+    match trees[i]!.passed.head?, acc with
+    | some (lf, _), some (_, b) => if lf.better b then some (i, lf) else acc
+    | some (lf, _), none => some (i, lf)
+    | none, _ => acc) none
 
 /-- A physics check running in the background, for the leaf of search `tree`. -/
 structure Pending where
@@ -381,12 +470,12 @@ structure SearchLog where
 /-- Run the tree searches for a bubble model, under the time limit. Returns the searches (with
 the plans that passed physics) and a log. -/
 def runSearch (cfg : PlannerConfig) (req : PlanRequest) (ph : PhysicsEngine) (m : BubbleModel) :
-    IO (List Tree × SearchLog) := do
+    IO (List Tree × List TurnedLeaf × SearchLog) := do
   let start ← IO.monoMsNow
   let reserve := min cfg.reserveMs (cfg.timeLimitMs / 5)
   let stopAt := start + cfg.timeLimitMs - reserve
   let n := req.blocks
-  if n == 0 then return ([], {})
+  if n == 0 then return ([], [], {})
   let up := probeRules ph req.human
   let mut log : SearchLog := { checks := probeChecks, up }
   -- the first sweep: greedy builds at a coarse spread of heights, in parallel. Builds not done
@@ -417,6 +506,13 @@ def runSearch (cfg : PlannerConfig) (req : PlanRequest) (ph : PhysicsEngine) (m 
   -- the longest physics check so far (ms). A check cannot be stopped, and the program does not
   -- end before its checks do, so no check starts that would likely end after the limit.
   let mut longest := 0
+  -- turned passes running in the background, and the leaves they started from
+  let mut turnTasks : Array TurnTask := #[]
+  let mut turnStarted : Std.HashSet UInt64 := {}
+  -- the time a turned check takes is guessed as `turnCoef * m⁴` ms; raised when one takes longer
+  let mut turnCoef : Q := turnCoef0
+  let turnDeadline := start + cfg.timeLimitMs + cfg.turnWaitMs
+  let mut turnTimed : Std.HashSet Nat := {}
   repeat
     let now ← IO.monoMsNow
     if now ≥ stopAt || log.tries ≥ cfg.maxTries then break
@@ -442,6 +538,31 @@ def runSearch (cfg : PlannerConfig) (req : PlanRequest) (ph : PhysicsEngine) (m 
         log := { log with trace := log.trace.push (now - start, b.fast, b.covers) }
     | some b, none => log := { log with trace := log.trace.push (now - start, b.fast, b.covers) }
     | none, _ => pure ()
+    -- a turned pass on the best plan that passed, if it is new and small enough
+    if cfg.turns then
+      -- learn from the passes that ended
+      for j in [0:turnTasks.size] do
+        let tt := turnTasks[j]!
+        if !turnTimed.contains j && (← IO.hasFinished tt.task) then
+          turnTimed := turnTimed.insert j
+          let took : Q := ((now - min now tt.since : Nat) : Q)
+          turnCoef := max turnCoef (took / ((max 1 (tt.blocks ^ 4) : Nat) : Q))
+      let running ← turnTasks.filterM fun t => do return !(← IO.hasFinished t.task)
+      if running.size < cfg.turnTasks then
+        match bestPassed trees with
+        | some (i, lf) =>
+          let key := blocksHash lf.blocks
+          let m := min n cfg.turnMaxBlocks
+          let est := turnEstimateMs turnCoef m
+          if !turnStarted.contains key && lf.blocks.size ≤ cfg.turnMaxBlocks + 3 &&
+              now + est ≤ turnDeadline then
+            turnStarted := turnStarted.insert key
+            let tr := trees[i]!
+            let rounds := if now + 2 * est ≤ turnDeadline then 2 else 1
+            let task := Task.spawn (prio := .dedicated) fun _ =>
+              turnAndCheck ph req.human n cfg.turnMaxBlocks tr lf rounds
+            turnTasks := turnTasks.push { task, since := now, blocks := m }
+        | none => pure ()
     -- new checks, taking turns between the searches
     let mut progress := true
     while progress && pending.size < cfg.parallelChecks && log.checks < req.maxChecks &&
@@ -489,16 +610,40 @@ def runSearch (cfg : PlannerConfig) (req : PlanRequest) (ph : PhysicsEngine) (m 
     steps := if dt < 150 then min 256 (steps * 2) else if dt > 600 then max 1 (steps / 2) else steps
     log := { log with rounds := log.rounds + 1 }
   log := { log with timedOut := pending.size, pruned := trees.foldl (· + ·.pruned) 0 }
-  return (trees.toList, log)
+  -- the turned passes: one more on the best plan, then wait for them, at most `turnWaitMs`
+  let mut turned : List TurnedLeaf := []
+  if cfg.turns then
+    match bestPassed trees with
+    | some (i, lf) =>
+      let now ← IO.monoMsNow
+      let m := min n cfg.turnMaxBlocks
+      let est := turnEstimateMs turnCoef m
+      if !turnStarted.contains (blocksHash lf.blocks) && lf.blocks.size ≤ cfg.turnMaxBlocks + 3 &&
+          now + est ≤ turnDeadline then
+        let tr := trees[i]!
+        let rounds := if now + 2 * est ≤ turnDeadline then 2 else 1
+        let task := Task.spawn (prio := .dedicated) fun _ =>
+          turnAndCheck ph req.human n cfg.turnMaxBlocks tr lf rounds
+        turnTasks := turnTasks.push { task, since := now, blocks := m }
+    | none => pure ()
+    repeat
+      if (← IO.monoMsNow) ≥ turnDeadline then break
+      if ← turnTasks.allM (fun t => (IO.hasFinished t.task : IO Bool)) then break
+      IO.sleep 20
+    for t in turnTasks do
+      if ← IO.hasFinished t.task then
+        if let some tl := t.task.get then turned := tl :: turned
+  return (trees.toList, turned, log)
 
 /-- The planner with settings: tree searches under the time limit (`runSearch`), then the
 candidates. -/
 def plannerWith (cfg : PlannerConfig) : Planner :=
   ⟨fun req ph sem => do
-    let (trees, _) ← runSearch cfg req ph req.target.model
-    return candidatesOf req sem trees⟩
+    let (trees, turned, _) ← runSearch cfg req ph req.target.model
+    return candidatesOf req sem trees turned⟩
 
-/-- The planner: tree searches for at most 30 seconds. -/
+/-- The planner: tree searches for at most 30 seconds, then up to 45 s more for the physics
+checks of plans with turned blocks. -/
 def planner : Planner := plannerWith {}
 
 end KaplaPlanner
