@@ -782,4 +782,45 @@ theorem stable_iff_tStable (b : Build) : Stable b ↔ TStable (b.map Plank.toT) 
         obtain ⟨r, hr, -, hy⟩ := key p hp
         rw [hr]; exact spread_turnY r p i _ hy
 
+/-- Every 15° step is a real rotation. -/
+private theorem step15_unit (r : KaplaCore.Rot) (h : IsStep15 r) :
+    r.cos * r.cos + r.sin * r.sin = 1 := by
+  obtain ⟨k, hk, rfl⟩ := h
+  have all : ∀ k < 24, (KaplaCore.Rot.step15 k).cos * (KaplaCore.Rot.step15 k).cos +
+      (KaplaCore.Rot.step15 k).sin * (KaplaCore.Rot.step15 k).sin = 1 := by decide +kernel
+  exact all k hk
+
+theorem turnedOf_shape (p : KaplaCore.Pose) (t : TPlank) (h : turnedOf p = some t) :
+    t.z = p.center.z - p.up.dims.z / 2 ∧ t.top = p.center.z + p.up.dims.z / 2 ∧
+    ∀ x y, t.Covers x y ↔ ∃ u v,
+      -(p.up.dims.x / 2) ≤ u ∧ u ≤ p.up.dims.x / 2 ∧
+      -(p.up.dims.y / 2) ≤ v ∧ v ≤ p.up.dims.y / 2 ∧
+      x = (p.center.add (p.rot.apply ⟨u, v, 0⟩)).x ∧
+      y = (p.center.add (p.rot.apply ⟨u, v, 0⟩)).y := by
+  obtain ⟨up, r, ⟨cx, cy, cz⟩⟩ := p
+  simp only [turnedOf] at h
+  split at h
+  · rename_i hr
+    simp only [Option.some.injEq] at h
+    subst h
+    have hu := step15_unit r hr
+    obtain ⟨c, s⟩ := r
+    simp only at hu
+    refine ⟨rfl, ?_, ?_⟩
+    · simp only [TPlank.top]; grind
+    · intro x y
+      simp only [TPlank.Covers, TPlank.halfLength, TPlank.halfWidth, TPlank.along, TPlank.across,
+        KaplaCore.Q3.add, KaplaCore.Rot.apply]
+      constructor
+      · rintro ⟨h1, h2, h3, h4⟩
+        refine ⟨c * (x - cx) + s * (y - cy), -s * (x - cx) + c * (y - cy), h1, h2, h3, h4, ?_, ?_⟩
+        · grind
+        · grind
+      · rintro ⟨u, v, h1, h2, h3, h4, rfl, rfl⟩
+        have e1 : c * (cx + (c * u - s * v) - cx) + s * (cy + (s * u + c * v) - cy) = u := by grind
+        have e2 : -s * (cx + (c * u - s * v) - cx) + c * (cy + (s * u + c * v) - cy) = v := by grind
+        rw [e1, e2]
+        exact ⟨h1, h2, h3, h4⟩
+  · simp at h
+
 end KaplaPhysics

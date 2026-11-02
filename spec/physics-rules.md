@@ -178,11 +178,11 @@ may report "Risky" for a build that is really solid. It must never report
 "Solid" for a build that some misplacement makes fall.
 
 - **R5. Pushed against a neighbour.** If the plan puts a plank touching an
-  already-placed plank side by side, the builder pushes it gently up against
-  that neighbour. In that direction the new plank has no error of its own: it
+  already-placed plank side by side, the builder lines it up against that
+  neighbour while setting it down. In that direction the new plank has no error of its own: it
   is exactly against its neighbour, so it moves with the neighbour's error.
-  In the other direction R1 still applies. Pushing it into place does not move
-  the neighbour.
+  In the other direction R1 still applies. Lining it up does not move the
+  neighbour.
 
 *Why R5:* a real builder lines planks up by feel, against each other. Treating
 a touching pair as exact is closer to reality than giving each its own 3.9 mm,
@@ -193,7 +193,8 @@ Side contacts still carry no force (C4); R5 is only about where planks end up.
   of placement errors allowed by R1 may make them share inside space. *Face to face* means
   side by side or end to end, flush, over a face of area bigger than zero. Those pairs are
   left out, because of R5. Planks that touch only at an edge or a corner are not left out:
-  R5 does not line them up. In Lean: `FaceToFace`, `KeepsGaps`. The engine asks for a gap
+  R5 does not line them up. This is strict: a 2 × 2 floor of flat planks is refused, because
+  its diagonal planks touch at a corner, even if their neighbours would line them up. In Lean: `FaceToFace`, `KeepsGaps`. The engine asks for a gap
   of at least `2ε`, or no shared height (`Clear`).
 - **R7. No tight slots.** A plank must not go into a slot exactly its own width, between
   two planks placed before it. Each wall can land `ε` towards the other, so the slot can
@@ -207,7 +208,8 @@ They are H6 in docs/DESIGN.md.
 The app turns a design into a list of steps. A person follows the steps.
 
 - **K1. One plank per step.** Each step places one plank, in one of the six
-  poses (B4), at one position.
+  poses (B4), at one position. A core plan may place up to `hands` blocks in a step; the
+  engine checks the build after every block, in list order.
 - **K2. Set it down, don't slide it.** The builder may carry the plank to its
   spot along any path: from above, from the side, at an angle. The last
   movement is a short drop straight down onto its supports. They do not
@@ -215,12 +217,12 @@ The app turns a design into a list of steps. A person follows the steps.
   (F3).
 - **K3. Reachable (a warning, not a rule).** The plank must be able to reach
   its spot without passing through any plank already placed. It may touch them
-  on the way: slide along a face, or brush an edge or a corner (for example,
-  slide under a roof whose underside is exactly at the plank's top). The app checks one
+  on the way: slide along a face, or brush an edge or a corner. The app checks one
   simple kind of path: the plank stays flat in its final pose, moves in a
   straight line from far away to a point a small gap `h` above its spot, then
-  drops `h`. The straight line may go in any direction. If such a path
-  exists, the step is *reachable*. If not, the app warns "this step may be
+  drops `h`. So a plank whose spot has a roof less than `h` above its top is
+  flagged: there is no room for the drop. The straight line may go in any direction. If
+  such a path exists, the step is *reachable*. If not, the app warns "this step may be
   hard to reach". It does not forbid the step, because a person can use
   curved paths, tilt the plank, or reach between planks.
 
@@ -256,7 +258,9 @@ Say these out loud in the demo and the README:
 - No help from friction or side contacts (F3, C4). This can only make us
   cautious.
 - No bumps, shaking, or dropping a plank from a height (K2, W4).
-- No pressing: the builder sets each plank down and lets go, without pushing on it.
+- No pressing: the builder sets each plank down and lets go, without pushing down on it.
+- No placement errors, gaps or reach for a plan with a turned plank (B6). One such plank
+  moves the whole plan to the check at the planned positions, straight planks too.
 - No hands or fingers: the reachability check (K3) looks at the plank only,
   and only at straight paths.
 - No tilted or leaning planks (B4).

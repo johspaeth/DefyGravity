@@ -142,7 +142,7 @@ def siteJs : String := "
   // Enter sends; Shift and Enter makes a new line.
   chatText.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
   // ---------- the proposal ----------
-  const badge = (text, good) => { const b = document.createElement('span'); b.className = 'badge ' + (good ? 'ok' : 'bad'); b.textContent = text; return b; };
+  const badge = (text, kind) => { const b = document.createElement('span'); b.className = 'badge ' + kind; b.textContent = text; return b; };
   const item = (parent, text) => { const li = document.createElement('li'); li.textContent = text; parent.append(li); return li; };
   const removeBubble = label => { if (busy || !current) return;
     const smaller = {...current, bubbles: current.bubbles.filter(b => b.label !== label)};
@@ -155,7 +155,9 @@ def siteJs : String := "
     proposalHeight = KaplaViewer.readNumber(score.height);
     KaplaViewer.showPlan(model, proposalHeight, p.view);
     badges.textContent = '';
-    badges.append(badge(!p.stands ? 'Does not stand' : p.assurance === 'robust' ? 'Stands, even 3.9 mm off' : 'Stands as planned (not checked for errors)', p.stands), badge(score.accepted ? 'Accepted' : 'Not accepted', score.accepted));
+    badges.append(!p.stands ? badge('Does not stand', 'bad') : p.assurance === 'robust' ? badge('Stands, even 3.9 mm off', 'ok') : badge('Stands as planned (not checked for errors)', 'warn'));
+    if (p.hardToReach) badges.append(badge('May be hard to reach', 'warn'));
+    badges.append(badge(score.accepted ? 'Accepted' : 'Not accepted', score.accepted ? 'ok' : 'bad'));
     scores.textContent = `Score ${score.scoreRounded} (${score.verdict}). Height ${(+proposalHeight.toFixed(2))} blocks, ${score.blockCount} blocks used. Target cells with no block: ${score.missing}. Block cells outside the target: ${score.extra}.`;
     physicsNotes.textContent = ''; p.physics.forEach(line => item(physicsNotes, line));
     if (score.outside.length) item(physicsNotes, `Not accepted: blocks outside the target: ${score.outside.length}.`);
