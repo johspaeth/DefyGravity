@@ -88,9 +88,9 @@ make check     # what CI checks (except `lake check` / `lake comparator`, Linux 
 make smoke     # the README's commands and the website, end to end, with no API key
 ```
 
-Without an API key, the website still works: open a model from the **Gallery**, look at it
-in 3D, and run the "stand-in tower" planner. The chat and the `ai` planners ask Claude and
-need a key, in one of two places (the file wins):
+Without an API key, the website still works: open a model from the **Gallery** and look at it
+in 3D. The chat and the planners on the page ("LLM, physics checked" and "LLM, physics not
+checked") ask Claude and need a key, in one of two places (the file wins):
 
 ```sh
 cp .env.example .env            # then put your key in it (git ignores .env)
