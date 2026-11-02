@@ -30,6 +30,10 @@ header,main{max-width:none}
 #effort{margin-left:auto}
 button:disabled{opacity:.5;cursor:default}
 #planStatus{color:var(--muted);flex-basis:100%}#planStatus:empty{display:none}#planStatus.bad{color:var(--bad);font-weight:600}
+#planLog{flex-basis:100%;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:4px 10px}
+#planLog summary{cursor:pointer;color:var(--muted)}
+#planLines{list-style:none;margin:4px 0;padding:0;max-height:12em;overflow-y:auto;font-size:.9rem}
+#planLines li{display:flex;gap:8px;overflow-wrap:anywhere}#planLines .t{color:var(--muted);font-variant-numeric:tabular-nums;min-width:3.2em}
 #scores{margin:4px 0}#physicsNotes,#tooSmall{margin:6px 0;padding-left:1.2em;color:var(--muted)}
 #tooSmall button{margin-left:8px;font-size:.85rem;padding:1px 8px}
 #site main{padding:0;margin:0;min-width:0}
@@ -52,6 +56,14 @@ def siteJs : String := "
   const list = get('models'), form = get('saveForm'), nameBox = get('saveName'), saveButton = get('saveButton'), prButton = get('prButton');
   const statusLine = get('status'), ask = get('ask'), askText = get('askText');
   const generate = get('generate'), plannerBox = get('planner'), blocksBox = get('planBlocks'), planStatus = get('planStatus');
+  // The progress of a running planner: lines from the server, each with the time since the start.
+  const planLog = get('planLog'), planLogTitle = get('planLogTitle'), planLines = get('planLines');
+  const clock = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const showLines = lines => { const atEnd = planLines.scrollTop + planLines.clientHeight >= planLines.scrollHeight - 4;
+    planLines.textContent = '';
+    lines.forEach(l => { const li = document.createElement('li'), t = document.createElement('span');
+      t.className = 't'; t.textContent = clock(l.t); li.append(t, document.createTextNode(l.text)); planLines.append(li); });
+    if (atEnd) planLines.scrollTop = planLines.scrollHeight; };
   // How much Claude thinks, for the planners that ask Claude. One button: each click takes the next level.
   const effortButton = get('effort'), efforts = ['low', 'medium', 'high'];
   let effort = 'high', claudePlanners = [];
@@ -62,7 +74,7 @@ def siteJs : String := "
   const proposal = get('proposal'), badges = get('badges'), scores = get('scores'), physicsNotes = get('physicsNotes'), tooSmall = get('tooSmall');
   // The proposal on screen always belongs to the model on screen, so a new model clears it.
   // lastSaved is the proposal's plan as the server gave it: saving sends it back.
-  const clearProposal = () => { proposalHeight = undefined; lastSaved = null; proposal.hidden = true; planStatus.textContent = ''; planStatus.className = ''; KaplaViewer.clearPlan(); };
+  const clearProposal = () => { proposalHeight = undefined; lastSaved = null; proposal.hidden = true; planStatus.textContent = ''; planStatus.className = ''; planLog.hidden = true; KaplaViewer.clearPlan(); };
   let current = null, openName = null, opening = 0, pending = null, busy = false, proposalHeight, lastSaved = null;
   const say = (text, bad) => { statusLine.textContent = text; statusLine.className = bad ? 'bad' : ''; };
   const noServer = 'Cannot reach the server. Is kapla serve still running?';
@@ -174,16 +186,28 @@ def siteJs : String := "
     setBusy(true);
     const usesClaude = claudePlanners.includes(plannerBox.value);
     proposal.hidden = true; planStatus.className = '';
-    planStatus.textContent = !usesClaude ? 'Working on a proposal...'
-      : effort === 'low' ? 'Working on a proposal, with low reasoning. This takes about a minute...'
-      : `Working on a proposal, with ${effort} reasoning. This can take several minutes...`;
+    // A clock and the planner's own progress lines, so the wait is not a blank screen.
+    const job = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), started = Date.now();
+    const seconds = () => Math.floor((Date.now() - started) / 1000);
+    const doing = 'Working on a proposal' + (usesClaude ? `, with ${effort} reasoning` : '');
+    const expect = !usesClaude ? 'This usually takes a few seconds.'
+      : effort === 'low' ? 'This usually takes about a minute.' : 'This can take several minutes.';
+    const tick = () => { planStatus.textContent = `${doing}: ${clock(seconds())} so far. ${expect} It stops after 15 minutes.`; };
+    showLines([]); planLogTitle.textContent = 'What the planner is doing'; planLog.hidden = false; planLog.open = true;
+    tick(); const timer = setInterval(tick, 1000);
+    let waiting = true, stopped = false;
+    (async () => { while (waiting) { try { const p = await send('/plan/progress/' + job); if (waiting && p.ok) showLines(p.body.log || []); } catch (_) {}
+      await new Promise(done => setTimeout(done, 1500)); } })();
+    const stop = (log, ok) => { if (stopped) return; stopped = true; waiting = false; clearInterval(timer); if (log) showLines(log);
+      planLogTitle.textContent = `What the planner did (${clock(seconds())} in all)`; planLog.open = !ok; };
     try { const r = await send('/plan', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({planner: plannerBox.value, blocks, model, ...(usesClaude ? {effort} : {})})});
+        body: JSON.stringify({planner: plannerBox.value, blocks, model, job, ...(usesClaude ? {effort} : {})})});
+      stop(r.body.log, r.ok && !!r.body.proposal);
       if (!r.ok) { planStatus.className = 'bad'; planStatus.textContent = r.body.error || 'Something went wrong.'; if (proposalHeight !== undefined) proposal.hidden = false; return; }
-      if (!r.body.proposal) { clearProposal(); KaplaViewer.show(model); planStatus.textContent = 'This planner made no proposal. The terminal running kapla serve shows why.'; return; }
+      if (!r.body.proposal) { clearProposal(); planLog.hidden = false; KaplaViewer.show(model); planStatus.textContent = 'This planner made no proposal. The steps below show why.'; return; }
       planStatus.textContent = ''; showProposal(model, r.body.proposal);
-    } catch (_) { planStatus.className = 'bad'; planStatus.textContent = noServer; }
-    finally { setBusy(false); } };
+    } catch (_) { stop(null, false); planStatus.className = 'bad'; planStatus.textContent = noServer; }
+    finally { stop(null, false); setBusy(false); } };
   send('/planners').then(r => { if (!r.ok) return; claudePlanners = r.body.claude || [];
     r.body.planners.forEach(name => { const o = document.createElement('option'); o.textContent = name; plannerBox.append(o); });
     showEffort(); }).catch(() => {});
@@ -223,7 +247,8 @@ def sitePage : String :=
 <label>Block limit <input id=\"planBlocks\" type=\"number\" min=\"1\" max=\"200\" step=\"1\" value=\"40\"></label>
 <button id=\"generate\" type=\"button\" disabled>Generate proposal</button>
 <button id=\"effort\" type=\"button\" disabled title=\"How much Claude thinks before it answers, for the planners that ask Claude. Click for the next level. Low is fastest, and fewer of its designs pass the checks. High is slowest, and most of its designs pass.\">Reasoning: high</button>
-<span id=\"planStatus\" role=\"status\"></span></div>
+<span id=\"planStatus\" role=\"status\"></span>
+<details id=\"planLog\" hidden><summary id=\"planLogTitle\"></summary><ol id=\"planLines\" aria-live=\"polite\"></ol></details></div>
 <div id=\"error\" role=\"alert\" hidden></div>
 <div id=\"view\"></div>
 <div id=\"info\"></div>

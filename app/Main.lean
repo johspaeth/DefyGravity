@@ -707,24 +707,52 @@ def getPlanners : Reply :=
 /-- How long the page waits for a planner, in seconds. -/
 def plannerSeconds : Nat := 900
 
+/-- The progress of the planners that are running, by job: lines with the second they were written,
+counted from the start of the job. The page sends a job name with `POST /plan` and reads the lines
+with `GET /plan/progress/JOB` while it waits. A job's lines are dropped when it ends; the answer to
+`POST /plan` has all of them. -/
+abbrev PlanProgress := IO.Ref (Std.HashMap String (Array (Nat × String)))
+
+/-- A job name from the page: 1 to 64 letters, digits, `-` or `_`. -/
+def goodJob (job : String) : Bool :=
+  0 < job.length && job.length ≤ 64 && job.all fun c => c.isAlphanum || c == '-' || c == '_'
+
+#guard goodJob "a1-b_2" && !goodJob "" && !goodJob "../x" && !goodJob (String.ofList (List.replicate 65 'a'))
+
+/-- The lines of a job as JSON: `[{"t": seconds, "text": line}]`. -/
+def progressJson (lines : Array (Nat × String)) : Json :=
+  Json.arr (lines.map fun (t, text) => Json.mkObj [("t", (t : Json)), ("text", Json.str text)])
+
 /-- Run a planner and ask for one plan. Physics and the scorer are run here again, so the badges do not
 depend on what a planner reports about itself. The height is the one the planner chose. -/
-def makeProposal (s : KaplaPlanner.Strategy) (m : KaplaCore.BubbleModel) (blocks : Nat) :
-    IO Json := do
+def makeProposal (s : KaplaPlanner.Strategy) (m : KaplaCore.BubbleModel) (blocks : Nat)
+    (log : String → IO Unit) : IO Json := do
   let target := KaplaCore.TargetSpec.ofBubbles m
   let candidates ← s.toPlanner.plan { target, blocks, maxCandidates := 1 }
     KaplaPhysics.physicsEngine KaplaSemantics.semanticEngine
   match candidates.head? with
-  | none => return Json.mkObj [("proposal", .null)]
+  | none =>
+    log "The planner made no proposal."
+    return Json.mkObj [("proposal", .null)]
   | some c =>
+    log s!"The planner proposed {c.plan.blockCount} blocks. Checking them again with the verified physics engine and the scorer..."
     let saved : SavedPlan := { planner := s.name, blocks, height := c.score.height, plan := c.plan }
-    return Json.mkObj [("proposal", ← IO.ofExcept (proposalJson target saved))]
+    let j ← IO.ofExcept (proposalJson target saved)
+    log "Done."
+    return Json.mkObj [("proposal", j)]
 
-/-- `POST /plan` with `planner`, `blocks`, `model` and, for the planners that ask Claude, an
-optional `effort` (`low`, `medium` or `high`, default `high`). The answer is `proposal`, or null
-if the planner made none. The page gets an answer even if a planner does not end. -/
-def postPlan (body : String) : IO Reply := do
-  let parsed : Except String (String × KaplaPlanner.Claude.Effort × Nat × KaplaCore.BubbleModel) := do
+/-- `GET /plan/progress/JOB`: the lines so far of a running job. A job that has not started or has
+ended has no lines. -/
+def getProgress (progress : PlanProgress) (job : String) : IO Reply := do
+  let lines := ((← progress.get).get? job).getD #[]
+  return { json := (Json.mkObj [("log", progressJson lines)]).compress }
+
+/-- `POST /plan` with `planner`, `blocks`, `model`, for the planners that ask Claude an optional
+`effort` (`low`, `medium` or `high`, default `high`), and an optional `job` name for
+`GET /plan/progress/JOB`. The answer is `proposal`, or null if the planner made none, and `log`, every
+progress line. The page gets an answer even if a planner does not end. -/
+def postPlan (progress : PlanProgress) (body : String) : IO Reply := do
+  let parsed : Except String (String × KaplaPlanner.Claude.Effort × Nat × KaplaCore.BubbleModel × Option String) := do
     let j ← KaplaSemantics.parseJson body
     let planner ← (← j.getObjVal? "planner").getStr?
     let effort ← match (j.getObjValAs? String "effort").toOption with
@@ -734,28 +762,51 @@ def postPlan (body : String) : IO Reply := do
         | none => throw s!"the effort must be low, medium or high, not \"{e}\""
     let blocks ← j.getObjValAs? Nat "blocks"
     let m ← KaplaSemantics.decode (← j.getObjVal? "model").compress
-    return (planner, effort, blocks, m)
+    let job ← match (j.getObjValAs? String "job").toOption with
+      | none => pure none
+      | some job => if goodJob job then pure (some job) else throw "the job name is not good"
+    return (planner, effort, blocks, m, job)
   match parsed with
   | .error e => return errorReply .badRequest s!"No proposal: {e}"
-  | .ok (name, effort, blocks, m) =>
+  | .ok (name, effort, blocks, m, job) =>
     if blocks == 0 || blocks > defaultMaxBlocks then
       return errorReply .badRequest s!"The block limit must be a whole number from 1 to {defaultMaxBlocks}."
+    unless sitePlanners.any (·.name == name) do
+      return errorReply .badRequest s!"There is no planner named {name}."
+    -- Without a job name the lines still go to the terminal and into the answer.
+    let key := job.getD s!"_{← IO.monoNanosNow}"
+    let start ← IO.monoMsNow
+    progress.modify (·.insert key #[])
+    let log (line : String) : IO Unit := do
+      let t := ((← IO.monoMsNow) - start) / 1000
+      IO.eprintln s!"[{key}] {t} s: {line}"
+      progress.modify fun p => match p.get? key with
+        | some lines => p.insert key (lines.push (t, line))
+        | none => p
+    let finish (r : Reply) (withLog : Json → Json) : IO Reply := do
+      let lines := ((← progress.get).get? key).getD #[]
+      progress.modify (·.erase key)
+      return { r with json := (withLog (progressJson lines)).compress }
     let some s := (sitePlanners.find? (·.name == name)).map fun s =>
-        (KaplaPlanner.strategyWithEffort? s.name effort).getD s
+        (KaplaPlanner.strategyWithEffort? s.name effort log).getD s
       | return errorReply .badRequest s!"There is no planner named {name}."
-    let task ← IO.asTask (makeProposal s m blocks) .dedicated
+    log s!"Started the planner \"{name}\" with at most {blocks} blocks."
+    let task ← IO.asTask (makeProposal s m blocks log) .dedicated
     let rec wait : Nat → IO Bool
       | 0 => return false
       | n + 1 => do
         if ← IO.hasFinished task then return true
         IO.sleep 100
         wait n
+    let errorWithLog (status : Std.Http.Status) (message : String) : IO Reply := do
+      log message
+      finish { status, json := "" } fun l => Json.mkObj [("error", Json.str message), ("log", l)]
     unless ← wait (plannerSeconds * 10) do
       IO.cancel task
-      return errorReply .gatewayTimeout s!"The planner did not finish in {plannerSeconds / 60} minutes."
+      return ← errorWithLog .gatewayTimeout s!"The planner did not finish in {plannerSeconds / 60} minutes."
     match task.get with
-    | .ok j => return { json := j.compress }
-    | .error e => return errorReply .internalServerError s!"The planner stopped with an error: {e}"
+    | .ok j => finish {json := ""} fun l => j.setObjVal! "log" l
+    | .error e => errorWithLog .internalServerError s!"The planner stopped with an error: {e}"
 
 /-- The biggest request we read. A model has at most 32 bubbles, so this is plenty. -/
 def maxBodyBytes : UInt64 := 1024 * 1024
@@ -769,6 +820,7 @@ structure Site where
   port : Nat
   key : Option String
   cache : ProposalCache
+  progress : PlanProgress
 
 /-- Send a reply as JSON. A browser must not keep an old list of models. -/
 def sendJson (r : Reply) : ContextAsync (Response Body.Any) :=
@@ -804,9 +856,11 @@ instance : Handler Site where
     else if method == .post && path == "/plan" then
       try
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
-        guarded (postPlan body)
+        guarded (postPlan site.progress body)
       catch e =>
         sendJson (errorReply .badRequest s!"No proposal: could not read the request: {e}")
+    else if method == .get && path.startsWith "/plan/progress/" then
+      guarded (getProgress site.progress (path.drop "/plan/progress/".length).toString)
     else if method == .get && path == "/gallery" then
       guarded getGallery
     else if method == .post && path.startsWith "/gallery/" && path.endsWith "/pr" then
@@ -833,10 +887,11 @@ def serve (port : Nat) : IO UInt32 := do
     IO.println "No API key in .env or in ANTHROPIC_API_KEY, so the chat will not work. The rest of the site does."
   let cache ← IO.mkRef {}
   checkGallery cache
+  let progress ← IO.mkRef {}
   try
     Async.block do
       let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, port.toUInt16⟩
-      let server ← Server.serve addr (Site.mk port key cache)
+      let server ← Server.serve addr (Site.mk port key cache progress)
       IO.println s!"Defy Gravity is running. Open http://localhost:{port}"
       (← IO.getStdout).flush
       server.waitShutdown

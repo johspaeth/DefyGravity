@@ -384,44 +384,68 @@ def Design.summary (d : Design) (checked : Bool) : String :=
       else s!"physics rejected ({c.physics.diagnostics.length} problems)"
     s!"{c.plan.blockCount} blocks, height {showQ c.score.height}, score {showScore c.score.score}, {shape}, {phys}"
 
-/-- Ask Claude these questions at the same time. -/
-def askAll (effort : Claude.Effort) (prompts : List String) : IO (List (Except String String)) := do
-  let tasks ← prompts.mapM fun p =>
-    IO.asTask (prio := .dedicated) (Claude.ask effort systemPrompt p answerSchema)
+/-- Where a strategy reports what it is doing, one line at a time. The CLI prints the lines to
+stderr; `kapla serve` also shows them on the page while the planner runs. -/
+abbrev Progress := String → IO Unit
+
+/-- Seconds since `start` (a time from `IO.monoMsNow`). -/
+def secondsSince (start : Nat) : IO Nat := return ((← IO.monoMsNow) - start) / 1000
+
+/-- Ask Claude these questions at the same time and judge each answer as soon as it comes back.
+Each design is reported when it is judged, so a slow answer does not hide the others. -/
+def askAndJudge (effort : Claude.Effort) (round : Nat) (checked : Bool) (log : Progress)
+    (req : PlanRequest) (ph : Option PhysicsEngine) (sem : SemanticEngine) (prompts : List String) :
+    IO (List (Except String String × Design)) := do
+  let start ← IO.monoMsNow
+  let n := prompts.length
+  let tasks ← prompts.zipIdx.mapM fun (p, i) =>
+    IO.asTask (prio := .dedicated) do
+      let r ← Claude.ask effort systemPrompt p answerSchema
+      let secs ← secondsSince start
+      match r with
+      | .error e =>
+        log s!"Round {round}, design {i + 1} of {n}: no answer from Claude after {secs} s ({e})"
+        pure (r, judge req ph sem r)
+      | .ok _ =>
+        log s!"Round {round}, design {i + 1} of {n}: Claude answered after {secs} s, checking the design..."
+        let d := judge req ph sem r
+        log s!"Round {round}, design {i + 1} of {n}: {d.summary checked}"
+        pure (r, d)
   tasks.mapM fun t => do
     match ← IO.wait t with
-    | .ok r => pure r
-    | .error e => pure (.error s!"{e}")
-
-/-- Log the designs of one round to stderr. -/
-def logRound (round : Nat) (checked : Bool) (ds : List Design) : IO Unit :=
-  for (d, i) in ds.zipIdx do
-    IO.eprintln s!"round {round}, design {i + 1}: {d.summary checked}"
+    | .ok rd => pure rd
+    | .error e => pure (.error s!"{e}", judge req ph sem (.error s!"{e}"))
 
 /-- The search: round 1 with independent proposals; round 2 repairs them if none passed. -/
-def aiRun (effort : Claude.Effort) (checkPhysics : Bool) (req : PlanRequest) (ph : PhysicsEngine) (sem : SemanticEngine) :
-    IO (List Candidate) := do
+def aiRun (effort : Claude.Effort) (checkPhysics : Bool) (log : Progress) (req : PlanRequest)
+    (ph : PhysicsEngine) (sem : SemanticEngine) : IO (List Candidate) := do
   let phOpt := if checkPhysics then some ph else none
   let first := userPrompt req.target.model req.blocks
-  let replies ← askAll effort (List.replicate designsPerRound first)
-  let round1 := replies.map (judge req phOpt sem)
-  logRound 1 checkPhysics round1
-  if let some c := bestOf round1 then return [c]
-  if replies.all (·.toOption.isNone) then
-    IO.eprintln "no answer from Claude; stopping"
+  log s!"Round 1: asking Claude for {designsPerRound} designs at once ({effort.name} reasoning, at most {req.blocks} blocks)..."
+  let round1 ← askAndJudge effort 1 checkPhysics log req phOpt sem (List.replicate designsPerRound first)
+  if let some c := bestOf (round1.map (·.2)) then
+    log s!"A design passed in round 1 (score {showScore c.score.score})."
+    return [c]
+  if round1.all (·.1.toOption.isNone) then
+    log "No answer from Claude; stopping."
     return []
-  let round2 := (← askAll effort (round1.map (repairPrompt first req.blocks))).map (judge req phOpt sem)
-  logRound 2 checkPhysics round2
-  match bestOf round2 with
-  | some c => return [c]
+  log s!"No design passed in round 1. Round 2: asking Claude to repair the {designsPerRound} designs..."
+  let round2 ← askAndJudge effort 2 checkPhysics log req phOpt sem
+    (round1.map fun (_, d) => repairPrompt first req.blocks d)
+  match bestOf (round2.map (·.2)) with
+  | some c =>
+    log s!"A design passed in round 2 (score {showScore c.score.score})."
+    return [c]
   | none =>
-    IO.eprintln "no design passed after 2 rounds"
+    log "No design passed after 2 rounds."
     return []
 
 /-- Claude proposes; the semantic and physics engines judge. -/
-def ai (effort : Claude.Effort := .high) : Strategy := ⟨"ai", aiRun effort true⟩
+def ai (effort : Claude.Effort := .high) (log : Progress := IO.eprintln) : Strategy :=
+  ⟨"ai", aiRun effort true log⟩
 
 /-- Claude proposes; only the semantic engine judges. Physics is not checked. -/
-def aiUnchecked (effort : Claude.Effort := .high) : Strategy := ⟨"ai-unchecked", aiRun effort false⟩
+def aiUnchecked (effort : Claude.Effort := .high) (log : Progress := IO.eprintln) : Strategy :=
+  ⟨"ai-unchecked", aiRun effort false log⟩
 
 end KaplaPlanner

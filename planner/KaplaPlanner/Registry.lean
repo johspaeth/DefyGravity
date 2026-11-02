@@ -14,12 +14,13 @@ def usesClaude (name : String) : Bool := name == "ai" || name == "ai-unchecked"
 /-- The strategy with this name, if there is one. -/
 def strategyByName? (name : String) : Option Strategy := strategies.find? (·.name == name)
 
-/-- The strategy with this name, asking Claude with this effort. Strategies that do not ask
-Claude are the same at every effort. -/
-def strategyWithEffort? (name : String) (effort : Claude.Effort) : Option Strategy :=
+/-- The strategy with this name, asking Claude with this effort and reporting its progress to `log`
+(stderr by default). Strategies that do not ask Claude are the same at every effort. -/
+def strategyWithEffort? (name : String) (effort : Claude.Effort) (log : Progress := IO.eprintln) :
+    Option Strategy :=
   match name with
-  | "ai" => some (ai effort)
-  | "ai-unchecked" => some (aiUnchecked effort)
+  | "ai" => some (ai effort log)
+  | "ai-unchecked" => some (aiUnchecked effort log)
   | _ => strategyByName? name
 
 #guard (strategyByName? "empty").isSome
