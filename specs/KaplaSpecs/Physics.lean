@@ -94,6 +94,8 @@ theorem checkPlan_sound (opts : PlanOptions) (ε : Rat) (maxPlanks : Nat) (steps
 
 -- The engine accepts the one-step plan E1.
 example : checkPlan {} placementError 200 e1 = true := by decide +kernel
+-- The engine accepts a plan with more than one step: E2.
+example : checkPlan {} placementError 200 e2 = true := by decide +kernel
 -- Ruled out: accepting E12 in its given order. After step 2, plank B sticks out past A's
 -- end with nothing on it yet, and falls.
 example : ¬ SafePlan {} placementError 200 e12 := fun h =>
@@ -335,6 +337,27 @@ example : Stable e1 ∧ TStable (e1.map Plank.toT) :=
 -- Ruled out: the turned reading of E4 standing. E4 falls.
 example : ¬ TStable (e4.map Plank.toT) := fun h => e4_not_stable ((stable_iff_tStable e4).2 h)
 
+/-- The conversion keeps each turned block where it is: the turned plank has the block's
+heights, and covers exactly the points that core's turn gives from the block's flat rectangle.
+So `(u, v)` is measured along and across the block, before turning. -/
+theorem turnedOf_shape (p : KaplaCore.Pose) (t : TPlank) (h : turnedOf p = some t) :
+    t.z = p.center.z - p.up.dims.z / 2 ∧ t.top = p.center.z + p.up.dims.z / 2 ∧
+    ∀ x y, t.Covers x y ↔ ∃ u v,
+      -(p.up.dims.x / 2) ≤ u ∧ u ≤ p.up.dims.x / 2 ∧
+      -(p.up.dims.y / 2) ≤ v ∧ v ≤ p.up.dims.y / 2 ∧
+      x = (p.center.add (p.rot.apply ⟨u, v, 0⟩)).x ∧
+      y = (p.center.add (p.rot.apply ⟨u, v, 0⟩)).y := by
+  sorry
+
+-- A flat block at 45° on the ground: the end of its long side is covered.
+example : (TPlank.mk .flat (.step15 3) 0 0 0).Covers (15 / 2 * (119 / 169)) (15 / 2 * (120 / 169)) := by
+  decide +kernel
+-- Ruled out: a point just past that end.
+example : ¬ (TPlank.mk .flat (.step15 3) 0 0 0).Covers (8 * (119 / 169)) (8 * (120 / 169)) := by
+  decide +kernel
+-- Ruled out: a turn that is not a 15° step has no turned plank.
+example : turnedOf ⟨.flat, .ofTriple 3 4 5, ⟨0, 0, 1 / 2⟩⟩ = none := by decide +kernel
+
 /-- B6: when the engine accepts a turned plan, it uses at most `maxPlanks` planks, and after
 every step the build so far is well-formed and stable at the planned positions. Placement
 errors are not checked for turned plans. -/
@@ -342,6 +365,8 @@ theorem checkTurnedPlan_sound (maxPlanks : Nat) (steps : TBuild)
     (h : checkTurnedPlan maxPlanks steps = true) : TSafePlan maxPlanks steps := by
   sorry
 
+-- The engine accepts a turned plank on the ground.
+example : checkTurnedPlan 200 [flat45] = true := by decide +kernel
 -- Ruled out: accepting a turned plank that floats one unit above the ground (P3).
 example : ¬ TSafePlan 200 [⟨.flat, .step15 3, 0, 0, 1⟩] := fun h =>
   absurd (h.2 1 (by decide) (by decide)).1 (by decide +kernel)
