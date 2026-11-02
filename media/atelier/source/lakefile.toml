@@ -1,0 +1,10 @@
+name = "kapla"
+version = "0.1.0"
+defaultTargets = ["kapla", "Kapla.Proofs", "Kapla.Tests"]
+
+[[lean_lib]]
+name = "Kapla"
+
+[[lean_exe]]
+name = "kapla"
+root = "Main"

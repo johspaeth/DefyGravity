@@ -1,0 +1,104 @@
+{
+  "checkedAt": "2026-11-01T02:19:44.883Z",
+  "passed": true,
+  "checks": [
+    "Theorem 1: exact statement, explanation and interactive example",
+    "Theorem 2: exact statement, explanation and interactive example",
+    "Theorem 3: exact statement, explanation and interactive example",
+    "Theorem 4: exact statement, explanation and interactive example",
+    "Theorem 5: exact statement, explanation and interactive example",
+    "Theorem 6: exact statement, explanation and interactive example",
+    "Orbit/refit, desktop-mobile-desktop, sharp single canvas and scrollable exact statement",
+    "Original construction, revision, forces and Undo history preserved",
+    "Proof-dialog entry, network failure without false acceptance, close during request and safe reopen"
+  ],
+  "visualChecks": [
+    {
+      "name": "theorem-1",
+      "labelsChecked": 44,
+      "minimumRatio": 5.78,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "theorem-2",
+      "labelsChecked": 45,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "rejected-overlap",
+      "labelsChecked": 45,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "theorem-3",
+      "labelsChecked": 46,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "theorem-4",
+      "labelsChecked": 45,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "theorem-5",
+      "labelsChecked": 46,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "complete-replay",
+      "labelsChecked": 46,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "theorem-6",
+      "labelsChecked": 45,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "rejected-force",
+      "labelsChecked": 45,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "mobile-start",
+      "labelsChecked": 44,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 1,
+      "failures": []
+    },
+    {
+      "name": "mobile-scene",
+      "labelsChecked": 44,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 1,
+      "failures": []
+    },
+    {
+      "name": "mobile-statement",
+      "labelsChecked": 45,
+      "minimumRatio": 4.73,
+      "disabledExemptions": 1,
+      "failures": []
+    }
+  ],
+  "pageErrors": [],
+  "expectedHttpRejections": 2,
+  "boundary": "Examples and UI are tested, not formally proved. Frozen Lean theorem sources are unchanged."
+}

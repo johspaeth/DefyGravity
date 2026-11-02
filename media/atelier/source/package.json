@@ -1,0 +1,25 @@
+{
+  "name": "kapla-atelier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node server.mjs",
+    "test": "node tests/integration.mjs",
+    "test:http": "node tests/transport.mjs",
+    "test:browser": "node tests/browser.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.19.3",
+    "lucide": "0.468.0",
+    "three": "0.183.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "playwright": "1.59.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "checkedAt": "2026-11-01T02:20:06.881Z",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Startup, exact scene, fonts and full-resolution desktop fit",
+      "passed": true
+    },
+    {
+      "name": "Sound cycle, help, proof report, and real evidence-link navigation",
+      "passed": true
+    },
+    {
+      "name": "All four presets, certification distinctions and force-overlay invalidation",
+      "passed": true
+    },
+    {
+      "name": "Instruction slider, previous/next, every-prefix checking, and in-flight pause cancellation",
+      "passed": true
+    },
+    {
+      "name": "Opposite coordinate inputs, all six orientations, authoritative previews, place and both undo controls",
+      "passed": true
+    },
+    {
+      "name": "Pointer placement and removal, keyboard tools, orbit, zoom cycle and refit",
+      "passed": true
+    },
+    {
+      "name": "Real JSON download/import round trip and rejection of a tampered certificate without mutation",
+      "passed": true
+    },
+    {
+      "name": "Real-time quake, null physics certification, exact pause freeze, slow-motion ratio, moving-pose refit and rebuild",
+      "passed": true,
+      "fps": 43
+    },
+    {
+      "name": "Nudge starts a domino chain reaction and Build restores the canonical scene",
+      "passed": true,
+      "fallen": 24
+    },
+    {
+      "name": "Live desktop-mobile-desktop resize, mobile forces and placement, unclipped physics controls, and short-window layout",
+      "passed": true
+    },
+    {
+      "name": "Backend failure disables editing without a stale green status; reload reconnects",
+      "passed": true
+    },
+    {
+      "name": "Placement-preview transport failure also clears the connection status and disables writes",
+      "passed": true
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true
+    },
+    {
+      "name": "Computed small-label contrast at least 4.5:1 in every captured state; no unexpected console errors",
+      "passed": true
+    }
+  ],
+  "visualChecks": [
+    {
+      "name": "desktop-build",
+      "labelsChecked": 42,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 1,
+      "failures": []
+    },
+    {
+      "name": "help-shortcuts",
+      "labelsChecked": 35,
+      "minimumRatio": 5.54,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "proof-dialog",
+      "labelsChecked": 17,
+      "minimumRatio": 5.78,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "load-paths",
+      "labelsChecked": 42,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 1,
+      "failures": []
+    },
+    {
+      "name": "uncertified-overhang",
+      "labelsChecked": 42,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 1,
+      "failures": []
+    },
+    {
+      "name": "construction-sequence",
+      "labelsChecked": 41,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 5,
+      "failures": []
+    },
+    {
+      "name": "physics-hint",
+      "labelsChecked": 45,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "physics-paused",
+      "labelsChecked": 42,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "domino-chain",
+      "labelsChecked": 43,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "mobile-build",
+      "labelsChecked": 30,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "mobile-load-paths",
+      "labelsChecked": 30,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "mobile-physics",
+      "labelsChecked": 24,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 2,
+      "failures": []
+    },
+    {
+      "name": "mobile-placement",
+      "labelsChecked": 31,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "short-window",
+      "labelsChecked": 42,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 0,
+      "failures": []
+    },
+    {
+      "name": "backend-disconnected",
+      "labelsChecked": 26,
+      "minimumRatio": 4.7,
+      "disabledExemptions": 18,
+      "failures": []
+    }
+  ],
+  "errors": [],
+  "unexpectedConsoleErrors": [],
+  "expectedConsoleErrors": [
+    "Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED"
+  ],
+  "viewports": [
+    "1600×1000",
+    "375×812",
+    "1280×600"
+  ]
+}

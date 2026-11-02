@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-11-01T01:43:49.888Z",
+  "functionalChecks": [
+    "Fresh hosted startup: 72 planks and accepted static certificate",
+    "Real hosted JSON download, clear and Lean-checked reimport: 27 exact bridge planks",
+    "Hosted placement and Undo through the real backend proxy",
+    "Same-page mobile upright placement and responsive controls",
+    "Hosted real-time earthquake, pause and exact canonical rebuild",
+    "Short 1280x600 window: outer scrolling exposes the entire footer and preset controls"
+  ],
+  "functionalPassed": true,
+  "headlessHosted": {
+    "viewport": {
+      "width": 1600,
+      "height": 1000
+    },
+    "earthquakeFps": 58
+  },
+  "earlierNativeHardwareObservation": {
+    "renderer": "full-resolution Canvas projection",
+    "mode": "physics",
+    "paused": false,
+    "fps": 15,
+    "cssWidth": 3392,
+    "cssHeight": 1192,
+    "dpr": 2,
+    "bufferWidth": 6784,
+    "bufferHeight": 2384
+  },
+  "nativeFinalRecheck": "Not completed: Comet session expired before the final capture.",
+  "performanceSignedOff": false,
+  "knownLimitation": "Large Retina surfaces remain below the frame-rate target despite the full-resolution Canvas fallback.",
+  "pageErrors": [],
+  "consoleErrors": []
+}

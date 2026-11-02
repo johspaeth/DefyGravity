@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f8f7f2">
+  <meta name="description" content="A little wooden world. Build with exact Lean-checked planks, find your balance, then let gravity have a go.">
+  <title>Kapla Atelier · A little wooden world</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700,800&f[]=switzer@400,500,600,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+  <script>window.__API_BASE__ = 'port/8000';</script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <a class="wordmark" href="./" aria-label="Kapla Atelier home">kapla<span class="wordmark-divider"></span><span class="atelier">atelier</span></a>
+    <span class="tagline">A little wooden world. Yours to make.</span>
+    <nav class="header-actions" aria-label="Workshop actions">
+      <button id="sound-btn" class="icon-button" title="Turn sound on" aria-label="Turn sound on" aria-pressed="false"><i data-lucide="volume-x"></i></button>
+      <button id="help-btn" class="icon-button" title="How to play" aria-label="How to play"><i data-lucide="circle-help"></i></button>
+      <button id="tour-open" class="button quiet" aria-label="Explore six theorems in 3D" disabled><span class="tour-open-long">Proof tour</span><span class="tour-open-short">Proofs</span></button>
+      <span class="header-divider"></span>
+      <button id="save-btn" class="button quiet" disabled><i data-lucide="download"></i><span>Save build</span></button>
+    </nav>
+  </header>
+
+  <main id="stage" aria-label="Interactive three-dimensional plank workshop">
+    <canvas id="workshop" aria-label="3D workshop. Drag to orbit. Use Add plank then arrow keys and Enter to build." tabindex="0"></canvas>
+    <div class="stage-top">
+      <div class="scene-heading">
+        <div class="eyebrow"><span class="live-dot"></span> YOUR WORKSHOP</div>
+        <h1 id="scene-title">Sky tower</h1>
+        <p id="scene-subtitle">Small pieces. Tall possibilities.</p>
+      </div>
+      <div class="mode-switch" role="group" aria-label="Workshop mode">
+        <button id="build-mode" class="active" aria-pressed="true"><i data-lucide="blocks"></i> Build</button>
+        <button id="play-mode" aria-pressed="false" disabled><i data-lucide="play"></i> Play</button>
+      </div>
+    </div>
+
+    <div class="tool-rail" role="group" aria-label="Building tools">
+      <button id="tool-view" class="tool active" title="Explore · V" aria-label="Explore and orbit" aria-pressed="true"><i data-lucide="mouse-pointer-2"></i><span>Explore</span></button>
+      <button id="tool-place" class="tool" title="Add plank · B" aria-label="Add plank" aria-pressed="false" disabled><i data-lucide="plus"></i><span>Add plank</span></button>
+      <button id="tool-remove" class="tool" title="Remove plank · X" aria-label="Remove plank" aria-pressed="false" disabled><i data-lucide="eraser"></i><span>Remove</span></button>
+      <span class="rail-divider"></span>
+      <button id="undo-btn" class="tool" title="Undo · Ctrl Z" aria-label="Undo last edit" disabled><i data-lucide="undo-2"></i><span>Undo</span></button>
+    </div>
+
+    <section class="inspector" aria-label="Build information">
+      <div class="inspector-kicker"><span class="tiny-plank"></span> THE BUILD</div>
+      <div class="build-stats">
+        <div><strong id="block-count">72</strong><span id="block-unit">planks</span></div>
+        <div><strong id="build-height">28.8<span> cm</span></strong><span>height</span></div>
+      </div>
+      <div class="inventory"><div><span id="inventory-fill"></span></div><span id="inventory-label">128 left in the box</span></div>
+      <button id="certificate-btn" class="certificate" disabled>
+        <span class="certificate-icon"><i data-lucide="shield-check"></i></span>
+        <span><strong id="certificate-title">Connecting to Lean</strong><small id="certificate-caption">Your build is checked here.</small></span>
+        <i data-lucide="chevron-right"></i>
+      </button>
+      <button id="forces-btn" class="text-button" aria-pressed="false" disabled><i data-lucide="route"></i><span>See the load paths</span><span class="mini-toggle"></span></button>
+      <div class="inspector-bottom">
+        <button id="gravity-btn" class="button primary" disabled><i data-lucide="play" class="play-icon"></i><span>Test gravity</span><i data-lucide="arrow-up-right"></i></button>
+        <span class="soft-note">The best part? You can always rebuild.</span>
+      </div>
+    </section>
+
+    <section id="placement-panel" class="placement-panel glass" aria-label="Plank controls" hidden>
+      <span class="eyebrow">ONE PLANK, SIX WAYS</span>
+      <div class="pose-selector" role="group" aria-label="Plank pose">
+        <button data-pose="0" class="active" aria-pressed="true"><span class="pose-shape flat"></span>Flat</button>
+        <button data-pose="2" aria-pressed="false"><span class="pose-shape edge"></span>On edge</button>
+        <button data-pose="4" aria-pressed="false"><span class="pose-shape tall"></span>Upright</button>
+      </div>
+      <div class="placement-actions"><button id="rotate-btn" class="text-button"><i data-lucide="rotate-cw"></i>Rotate <kbd>R</kbd></button><button id="place-btn" class="button small primary">Place <kbd>↵</kbd></button></div>
+      <span id="placement-coordinates" class="coordinates">Point at the table to place</span>
+      <button id="placement-status" class="placement-status" aria-label="Inspect the current build certificate"></button>
+    </section>
+
+    <div id="play-toolbar" class="play-toolbar glass" role="group" aria-label="Physics playground" hidden>
+      <div class="play-label"><span class="live-dot"></span> GRAVITY PLAYGROUND <small>Illustrative physics, not a proof</small></div>
+      <div class="play-actions">
+        <button id="pause-btn" class="button" aria-label="Pause physics"><i data-lucide="pause"></i><span>Pause</span></button>
+        <button id="nudge-btn" class="button"><i data-lucide="hand"></i><span>Nudge</span></button>
+        <button id="quake-btn" class="button"><i data-lucide="waves"></i><span>Earthquake</span></button>
+        <button id="slow-btn" class="button" aria-pressed="false"><i data-lucide="timer"></i><span>Slow-mo</span></button>
+        <button id="rebuild-btn" class="button primary"><i data-lucide="rotate-ccw"></i><span>Rebuild</span></button>
+      </div>
+    </div>
+
+    <section id="steps-panel" class="steps-panel glass" aria-label="Construction sequence" hidden>
+      <div class="steps-heading"><span class="eyebrow">ONE STEP AT A TIME</span><button id="steps-close" class="icon-button" aria-label="Close construction sequence"><i data-lucide="x"></i></button></div>
+      <div class="steps-controls"><button id="step-prev" class="icon-button" aria-label="Previous construction step"><i data-lucide="skip-back"></i></button><button id="step-play" class="icon-button" aria-label="Play construction sequence"><i data-lucide="play"></i></button><input id="step-range" type="range" min="0" max="72" value="72" aria-label="Construction step"><button id="step-next" class="icon-button" aria-label="Next construction step"><i data-lucide="skip-forward"></i></button><span id="step-number">72 / 72</span></div>
+      <p id="step-description">All planks in place.</p>
+      <button id="check-plan-btn" class="text-button"><i data-lucide="list-checks"></i><span>Check the balance of every step</span></button>
+      <span id="plan-result" role="status"></span>
+    </section>
+
+    <div class="stage-bottom">
+      <div id="debug-hud" class="debug-hud" aria-label="Rendering performance">Starting renderer</div>
+      <div id="interaction-hint" class="interaction-hint"><i data-lucide="move"></i><span>Drag to orbit</span><span class="hint-dot"></span><i data-lucide="mouse"></i><span>Scroll to zoom</span></div>
+      <div class="camera-tools">
+        <button id="steps-btn" class="icon-button" title="Replay the build" aria-label="Replay construction sequence" disabled><i data-lucide="list-video"></i></button>
+        <span></span>
+        <button id="zoom-in-btn" class="icon-button" title="Zoom in" aria-label="Zoom in"><i data-lucide="plus"></i></button>
+        <button id="zoom-out-btn" class="icon-button" title="Zoom out" aria-label="Zoom out"><i data-lucide="minus"></i></button>
+        <button id="reset-camera-btn" class="icon-button" title="Fit the build · C" aria-label="Fit build in camera"><i data-lucide="scan"></i></button>
+      </div>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <div id="loading" class="loading-overlay">
+      <img src="./assets/atelier-cover.png" alt="An illustrated wooden tower and bridge on a sunlit green tabletop">
+      <div class="loading-content"><span class="eyebrow">WELCOME TO THE ATELIER</span><h2>Make a little<br>room for play.</h2><p id="loading-message">Opening your plank box and starting Lean…</p><span class="loading-line"></span><button id="retry-btn" class="button primary" hidden>Try again</button></div>
+    </div>
+    <noscript><div class="fatal">This workshop needs JavaScript and WebGL 2. The Lean source is included in the project.</div></noscript>
+  </main>
+
+  <section id="proof-tour" aria-label="Six theorems in 3D" hidden></section>
+  <section class="blueprints" aria-label="Starter blueprints">
+    <div class="shelf-label"><span class="eyebrow">A LITTLE INSPIRATION</span><h2>What will you build?</h2></div>
+    <div class="preset-list">
+      <button class="preset active" data-preset="tower" aria-pressed="true" disabled><span class="preset-art" data-mini="tower" aria-hidden="true"></span><span><strong>Sky tower</strong><small>Reach a little higher</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+      <button class="preset" data-preset="bridge" aria-pressed="false" disabled><span class="preset-art" data-mini="bridge" aria-hidden="true"></span><span><strong>Little bridge</strong><small>Bring two sides together</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+      <button class="preset" data-preset="domino" aria-pressed="false" disabled><span class="preset-art" data-mini="domino" aria-hidden="true"></span><span><strong>Domino garden</strong><small>One tiny push…</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+      <button class="preset" data-preset="overhang" aria-pressed="false" disabled><span class="preset-art" data-mini="overhang" aria-hidden="true"></span><span><strong>The tipping point</strong><small>Find the edge of balance</small></span><span class="preset-check"><i data-lucide="check"></i></span></button>
+    </div>
+    <button id="new-btn" class="new-build" disabled><i data-lucide="plus"></i><span>Start fresh</span></button>
+  </section>
+  <footer class="footer">
+    <span>No glue. No nails. Just possibility.</span>
+    <button id="proof-footer" class="engine-label"><span class="live-dot" id="engine-dot"></span><span id="engine-status">Connecting to Lean 4.35.0</span><i data-lucide="arrow-up-right"></i></button>
+    <button id="import-btn" class="footer-import"><i data-lucide="upload"></i>Open a build</button>
+  </footer>
+</div>
+<input id="import-file" type="file" accept=".json,application/json" hidden>
+
+<dialog id="help-dialog" class="dialog help-dialog" aria-labelledby="help-title">
+  <button class="dialog-close icon-button" data-close="help-dialog" aria-label="Close help"><i data-lucide="x"></i></button>
+  <img class="help-art" src="./assets/atelier-cover.png" alt="Pine plank tower and bridge illustration">
+  <div class="dialog-content">
+    <span class="eyebrow">A FEW SMALL THINGS</span><h2 id="help-title">Welcome to your<br>happy building place.</h2>
+    <p>One identical plank. Six ways to turn it. As many ideas as you can fit on the table.</p>
+    <ol class="how-to">
+      <li><span>01</span><div><strong>Make it yours.</strong><p>Choose Add plank, point at the table, and click. Lean lowers the piece to its first contact. Rotate with R.</p></div></li>
+      <li><span>02</span><div><strong>Find your balance.</strong><p>Inspect the load paths or replay your build one plank at a time. A checked certificate means vertical loads balance in our ideal model.</p></div></li>
+      <li><span>03</span><div><strong>Enjoy the little collapse.</strong><p>Test gravity, give it a nudge, or try an earthquake. Rebuild brings your original construction back.</p></div></li>
+    </ol>
+    <details><summary>Keyboard shortcuts</summary><div class="shortcut-grid"><span><kbd>B</kbd> Add plank</span><span><kbd>V</kbd> Explore</span><span><kbd>X</kbd> Remove</span><span><kbd>R</kbd> Rotate</span><span><kbd>T</kbd> Change pose</span><span><kbd>↵</kbd> Place plank</span><span><kbd>↑ ↓ ← →</kbd> Move preview</span><span><kbd>Ctrl Z</kbd> Undo</span><span><kbd>C</kbd> Fit camera</span><span><kbd>Space</kbd> Pause physics</span></div></details>
+    <p class="fineprint">Illustrations are atmospheric, not construction records. This is an unofficial, independent plank-building toy, not a KAPLA product.</p>
+    <button class="button primary" data-close="help-dialog">Let's make something<i data-lucide="arrow-right"></i></button>
+  </div>
+</dialog>
+
+<dialog id="proof-dialog" class="dialog proof-dialog" aria-labelledby="proof-title">
+  <div class="dialog-content">
+    <button class="dialog-close icon-button" data-close="proof-dialog" aria-label="Close proof details"><i data-lucide="x"></i></button>
+    <span class="eyebrow">A LITTLE MATH UNDER THE WOOD</span>
+    <h2 id="proof-title">Beautifully simple.<br>Precisely checked.</h2>
+    <p>The scene record and its checker run in Lean 4.35.0. The pretty pixels are not the evidence.</p>
+    <button id="tour-from-proof" class="button primary">Explore six theorems in 3D<i data-lucide="arrow-right"></i></button>
+    <div id="proof-scene-status" class="proof-callout"></div>
+    <button id="proof-forces-btn" class="button quiet" aria-pressed="false" disabled>Inspect the load paths</button>
+    <div class="proof-grid">
+      <section><i data-lucide="boxes"></i><h3>Place without overlap.</h3><p>A legal drop preserves disjoint interiors, unique IDs, and inventory. Its whole straight-down insertion path is clear.</p></section>
+      <section><i data-lucide="scale"></i><h3>Account for every load.</h3><p>Accepted certificates use nonnegative contact forces and exact integer arithmetic. Each plank balances vertical force and both first moments.</p></section>
+    </div>
+    <div class="boundary-note"><strong>What this does not prove</strong><p>Real-world safety, friction, bending, sideways stability, resistance to a bump, or Rapier's moving simulation. The certificate solver can miss a valid witness; “not certified” does not mean “impossible.”</p></div>
+    <div id="verification-status" class="verification-status">Loading the build verification report…</div>
+    <p class="fineprint">The author-proposed specification is frozen for comparison, not independently approved by an organizer. The compiler, runtime, JSON bridge, browser rendering, and physics remain outside the proof.</p>
+    <div class="proof-links"><a href="./proof/SPECIFICATION.md" target="_blank" rel="noopener">Read the specification<i data-lucide="arrow-up-right"></i></a><a href="./proof/comparator.txt" target="_blank" rel="noopener">Comparator log<i data-lucide="arrow-up-right"></i></a><a href="./proof/lake-check.txt" target="_blank" rel="noopener">Kernel replay<i data-lucide="arrow-up-right"></i></a></div>
+  </div>
+</dialog>
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://perplexity.localhost","http://localhost:1420","http://127.0.0.1:1420","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  const DEFAULT_LINE_HEIGHT = 16;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  const PICK_CAPABILITIES = ["pick"];
+  const PICK_CHAIN_LENGTH = 4;
+  const PICK_MAX_TEXT_CHARS = 120;
+  const PICK_MAX_HTML_CHARS = 300;
+
+  function truncate(value, maxChars) {
+    return value.length > maxChars ? value.slice(0, maxChars - 1) + "…" : value;
+  }
+
+  function isPickableElement(element) {
+    return (
+      element instanceof Element &&
+      element !== document.documentElement &&
+      element !== document.body
+    );
+  }
+
+  function resolvePickTarget(x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const element = document.elementFromPoint(x, y);
+    return isPickableElement(element) ? element.closest("svg") || element : null;
+  }
+
+  function pickLabel(element) {
+    if (element.id) return element.localName + "#" + element.id;
+    return [element.localName].concat(Array.from(element.classList).slice(0, 2)).join(".");
+  }
+
+  // Only attributes that help find the element in source. data-* values and URL
+  // query strings or fragments can carry tokens.
+  const PICK_ATTRIBUTES = new Set([
+    "id",
+    "class",
+    "name",
+    "type",
+    "role",
+    "alt",
+    "aria-label",
+    "href",
+    "src",
+  ]);
+
+  function pickAttributeValue(attribute) {
+    return attribute.name === "href" || attribute.name === "src"
+      ? attribute.value.split(/[?#]/)[0]
+      : attribute.value;
+  }
+
+  function describePickElement(element) {
+    const chain = [];
+    for (
+      let current = element;
+      isPickableElement(current) && chain.length < PICK_CHAIN_LENGTH;
+      current = current.parentElement
+    ) {
+      chain.unshift(current);
+    }
+    const attributes = Array.from(element.attributes)
+      .filter((attribute) => PICK_ATTRIBUTES.has(attribute.name))
+      .map((attribute) => ` ${attribute.name}="${pickAttributeValue(attribute).replace(/"/g, "&quot;")}"`)
+      .join("");
+    const text = (element.innerText || element.textContent || "").replace(/\s+/g, " ").trim();
+    return {
+      chain: chain.map(pickLabel),
+      html: truncate(`<${element.localName}${attributes}>`, PICK_MAX_HTML_CHARS),
+      text: text ? truncate(text, PICK_MAX_TEXT_CHARS) : undefined,
+    };
+  }
+
+  // Hover asks once per frame, and innerText on a large section forces layout,
+  // so only the rect is re-read while the pointer stays on the same element.
+  // Clicks ask for fresh details since the page may have changed the element.
+  let lastPick = null;
+
+  function describePickTarget(element, fresh) {
+    if (fresh || lastPick?.element !== element) {
+      lastPick = { element, details: describePickElement(element) };
+    }
+    const rect = element.getBoundingClientRect();
+    return {
+      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+      ...lastPick.details,
+    };
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      capabilities: PICK_CAPABILITIES,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_PICK") {
+      const element = resolvePickTarget(event.data.x, event.data.y);
+      postToTrustedTop({
+        type: "INLINE_EDIT_PICK_RESULT",
+        seq: event.data.seq,
+        target: element ? describePickTarget(element, event.data.fresh === true) : null,
+      });
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_BY") {
+      const { deltaX, deltaY, deltaMode } = event.data;
+      if (!scrollForwarding || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
+      if (deltaMode !== 0 && deltaMode !== 1 && deltaMode !== 2) return;
+      const lineHeight =
+        parseFloat(getComputedStyle(document.documentElement).lineHeight) || DEFAULT_LINE_HEIGHT;
+      const scaleX = deltaMode === 1 ? lineHeight : deltaMode === 2 ? window.innerWidth : 1;
+      const scaleY = deltaMode === 1 ? lineHeight : deltaMode === 2 ? window.innerHeight : 1;
+      // The selection overlay receives the wheel event instead of this iframe.
+      // Instant scrolling preserves trackpad deltas even on smooth-scroll sites.
+      window.scrollBy({ left: deltaX * scaleX, top: deltaY * scaleY, behavior: "instant" });
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>

@@ -1,0 +1,85 @@
+ta200-design.json: 200 steps, 200 blocks
+  Physics: not shown to be safe to build
+  blocks 146 and 183 overlap
+  blocks 146 and 184 overlap
+  blocks 148 and 181 overlap
+  blocks 148 and 182 overlap
+  blocks 162 and 179 overlap
+  blocks 162 and 180 overlap
+  blocks 164 and 177 overlap
+  blocks 164 and 178 overlap
+  blocks 165 and 166 overlap
+  blocks 165 and 168 overlap
+  blocks 166 and 167 overlap
+  blocks 166 and 179 overlap
+  blocks 166 and 180 overlap
+  blocks 167 and 168 overlap
+  blocks 168 and 177 overlap
+  blocks 168 and 178 overlap
+  blocks 169 and 170 overlap
+  blocks 169 and 172 overlap
+  blocks 170 and 171 overlap
+  blocks 171 and 172 overlap
+  blocks 173 and 174 overlap
+  blocks 173 and 176 overlap
+  blocks 174 and 175 overlap
+  blocks 175 and 176 overlap
+  blocks 185 and 191 overlap
+  blocks 186 and 195 overlap
+  blocks 189 and 192 overlap
+  blocks 190 and 196 overlap
+  blocks 197 and 200 overlap
+  blocks 198 and 200 overlap
+  blocks 199 and 200 overlap
+  blocks 153 and 154 have a small gap: a 3.9 mm error could close it
+  blocks 153 and 156 have a small gap: a 3.9 mm error could close it
+  blocks 154 and 155 have a small gap: a 3.9 mm error could close it
+  blocks 154 and 183 have a small gap: a 3.9 mm error could close it
+  blocks 154 and 184 have a small gap: a 3.9 mm error could close it
+  blocks 155 and 156 have a small gap: a 3.9 mm error could close it
+  blocks 156 and 181 have a small gap: a 3.9 mm error could close it
+  blocks 156 and 182 have a small gap: a 3.9 mm error could close it
+  blocks 157 and 158 have a small gap: a 3.9 mm error could close it
+  blocks 157 and 160 have a small gap: a 3.9 mm error could close it
+  blocks 158 and 159 have a small gap: a 3.9 mm error could close it
+  blocks 158 and 183 have a small gap: a 3.9 mm error could close it
+  blocks 158 and 184 have a small gap: a 3.9 mm error could close it
+  blocks 159 and 160 have a small gap: a 3.9 mm error could close it
+  blocks 160 and 181 have a small gap: a 3.9 mm error could close it
+  blocks 160 and 182 have a small gap: a 3.9 mm error could close it
+  blocks 161 and 162 have a small gap: a 3.9 mm error could close it
+  blocks 161 and 164 have a small gap: a 3.9 mm error could close it
+  blocks 162 and 163 have a small gap: a 3.9 mm error could close it
+  blocks 162 and 183 have a small gap: a 3.9 mm error could close it
+  blocks 162 and 184 have a small gap: a 3.9 mm error could close it
+  blocks 163 and 164 have a small gap: a 3.9 mm error could close it
+  blocks 164 and 181 have a small gap: a 3.9 mm error could close it
+  blocks 164 and 182 have a small gap: a 3.9 mm error could close it
+  blocks 174 and 179 have a small gap: a 3.9 mm error could close it
+  blocks 174 and 180 have a small gap: a 3.9 mm error could close it
+  blocks 176 and 177 have a small gap: a 3.9 mm error could close it
+  blocks 176 and 178 have a small gap: a 3.9 mm error could close it
+  step 5: not shown to stand after block 5 (falls, risky, or a turn the engine cannot check)
+  step 166: may be hard to reach (warning only)
+  step 167: may be hard to reach (warning only)
+  step 168: may be hard to reach (warning only)
+  step 170: may be hard to reach (warning only)
+  step 171: may be hard to reach (warning only)
+  step 172: may be hard to reach (warning only)
+  step 174: may be hard to reach (warning only)
+  step 175: may be hard to reach (warning only)
+  step 176: may be hard to reach (warning only)
+  step 177: may be hard to reach (warning only)
+  step 178: may be hard to reach (warning only)
+  step 179: may be hard to reach (warning only)
+  step 180: may be hard to reach (warning only)
+  step 181: may be hard to reach (warning only)
+  step 182: may be hard to reach (warning only)
+  step 183: may be hard to reach (warning only)
+  step 184: may be hard to reach (warning only)
+  step 191: may be hard to reach (warning only)
+  step 192: may be hard to reach (warning only)
+  step 195: may be hard to reach (warning only)
+  step 196: may be hard to reach (warning only)
+  step 200: may be hard to reach (warning only)
+exit=1

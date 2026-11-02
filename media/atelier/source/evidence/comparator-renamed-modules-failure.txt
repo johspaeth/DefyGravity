@@ -1,0 +1,26 @@
+Resolving dependencies
+Building Challenge.Proofs
+ℹ [5/5] Replayed Challenge.Proofs
+info: trusted/Challenge/Proofs.lean:116:0: 'Kapla.landingHeight_clears' depends on axioms: [propext, Quot.sound]
+info: trusted/Challenge/Proofs.lean:117:0: 'Kapla.landingHeight_minimal' depends on axioms: [propext]
+info: trusted/Challenge/Proofs.lean:118:0: 'Kapla.vertical_path_clear' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: trusted/Challenge/Proofs.lean:119:0: 'Kapla.place_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: trusted/Challenge/Proofs.lean:120:0: 'Kapla.replay_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: trusted/Challenge/Proofs.lean:121:0: 'Kapla.accumulate_eq_reference' depends on axioms: [propext]
+info: trusted/Challenge/Proofs.lean:122:0: 'Kapla.certificate_sound' depends on axioms: [propext, Quot.sound]
+info: trusted/Challenge/Proofs.lean:123:0: 'Kapla.certificate_complete' depends on axioms: [propext, Quot.sound]
+Build completed successfully (5 jobs).
+Exporting #[Quot, Quot.mk, Quot.lift, Quot.ind, Kapla.landingHeight_clears, Kapla.landingHeight_minimal, Kapla.vertical_path_clear, Kapla.place_preserves_validity, Kapla.replay_preserves_validity, Kapla.accumulate_eq_reference, Kapla.certificate_sound, Kapla.certificate_complete, propext, Classical.choice, Quot.sound, Nat.add, Nat.sub, Nat.mul, Nat.pow, Nat.gcd, Nat.div, Nat.mod, Nat.beq, Nat.ble, Nat.land, Nat.lor, Nat.xor, Nat.shiftLeft, Nat.shiftRight, String.ofList, Char.ofNat, List, eagerReduce, Nat, String, String.mk, Char, optParam, autoParam, semiOutParam, outParam] from Challenge.Proofs
+Building Kapla.Proofs
+ℹ [5/5] Replayed Kapla.Proofs
+info: Kapla/Proofs.lean:116:0: 'Kapla.landingHeight_clears' depends on axioms: [propext, Quot.sound]
+info: Kapla/Proofs.lean:117:0: 'Kapla.landingHeight_minimal' depends on axioms: [propext]
+info: Kapla/Proofs.lean:118:0: 'Kapla.vertical_path_clear' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:119:0: 'Kapla.place_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:120:0: 'Kapla.replay_preserves_validity' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Kapla/Proofs.lean:121:0: 'Kapla.accumulate_eq_reference' depends on axioms: [propext]
+info: Kapla/Proofs.lean:122:0: 'Kapla.certificate_sound' depends on axioms: [propext, Quot.sound]
+info: Kapla/Proofs.lean:123:0: 'Kapla.certificate_complete' depends on axioms: [propext, Quot.sound]
+Build completed successfully (5 jobs).
+error: Const does not match between challenge and target 'Kapla.Spec.instDecidableLowerFace'
+Exporting #[Quot, Quot.mk, Quot.lift, Quot.ind, Kapla.landingHeight_clears, Kapla.landingHeight_minimal, Kapla.vertical_path_clear, Kapla.place_preserves_validity, Kapla.replay_preserves_validity, Kapla.accumulate_eq_reference, Kapla.certificate_sound, Kapla.certificate_complete, propext, Classical.choice, Quot.sound, Nat.add, Nat.sub, Nat.mul, Nat.pow, Nat.gcd, Nat.div, Nat.mod, Nat.beq, Nat.ble, Nat.land, Nat.lor, Nat.xor, Nat.shiftLeft, Nat.shiftRight, String.ofList, Char.ofNat, List, eagerReduce, Nat, String, String.mk, Char, optParam, autoParam, semiOutParam, outParam] from Kapla.Proofs

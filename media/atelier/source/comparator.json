@@ -1,0 +1,16 @@
+{
+  "challenge_module": "FrozenReference",
+  "solution_module": "Kapla.Proofs",
+  "theorem_names": [
+    "Kapla.landingHeight_clears",
+    "Kapla.landingHeight_minimal",
+    "Kapla.vertical_path_clear",
+    "Kapla.place_preserves_validity",
+    "Kapla.replay_preserves_validity",
+    "Kapla.accumulate_eq_reference",
+    "Kapla.certificate_sound",
+    "Kapla.certificate_complete"
+  ],
+  "definition_names": [],
+  "permitted_axioms": ["propext", "Classical.choice", "Quot.sound"]
+}
