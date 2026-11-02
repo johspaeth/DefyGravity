@@ -2,7 +2,7 @@
 
 Videos, renders, diagrams and team shirt art made for the Defy Gravity (KaplaBuilder) demo at Vibecheck, TheGP, San Francisco, Nov 1 2026.
 
-This folder is a staging copy for review. Nothing in it has been committed or pushed. Every file is a byte-for-byte copy of the final version on the build box; nothing was re-encoded.
+Every file is a byte-for-byte copy of the final version on the build box, except four that were re-rendered from their own sources on Nov 2 2026 to correct a caption (see [Corrections](#corrections-nov-2-2026)).
 
 ## Layout
 
@@ -30,7 +30,7 @@ contact-sheet.png, MANIFEST.sha256
 
 | Path | What it shows | Source / how made | Dimensions / duration | Size |
 |---|---|---|---|---|
-| `video/defy-gravity-90s-v2.mp4` | The 90-second cut used on stage (v2): title card, Brandenburg Gate, Golden Gate, Transamerica look-alike to round 7, duck, closing line. No audio. | /workspace/v90/defygravity-90s-v2.mp4; ffmpeg concat of six rendered segments | 1280x720, 90 s | 9.8 MB |
+| `video/defy-gravity-90s-v2.mp4` | The 90-second cut used on stage (v2): title card, Brandenburg Gate (captioned "94 planks, stands at planned positions only"), Golden Gate, Transamerica look-alike to round 7, duck, closing line. No audio. | /workspace/v90/defygravity-90s-v2.mp4; ffmpeg concat of six rendered segments (Brandenburg segment re-rendered Nov 2, see Corrections) | 1280x720, 90 s | 9.9 MB |
 | `renders/golden-gate/golden-gate-200-overlay.mp4` | Golden Gate, 200 planks: plank build, then decorative orange-bridge overlay fades in and back. | kapla-demo/gg/overlay200 (Three.js replay of gg200-pass.json, headless frame capture, ffmpeg; synthesized music) | 1280x720, 22 s | 2.8 MB |
 | `renders/golden-gate/golden-gate-200-planks.png` | Golden Gate, finished 200-plank build (planks only). | kapla-demo/gg/overlay200/shots/blocks.png | 1280x720 | 246 KB |
 | `renders/golden-gate/golden-gate-200-morph.png` | Golden Gate, mid-morph between planks and decorative overlay. | kapla-demo/gg/overlay200/shots/mid.png | 1280x720 | 277 KB |
@@ -54,8 +54,8 @@ contact-sheet.png, MANIFEST.sha256
 | `renders/duck/duck-200-morph.png` | Duck, mid-morph between planks and decorative skin. | kapla-demo/duck200-v3/overlay/shots/mid.png | 1280x720 | 218 KB |
 | `renders/duck/duck-200-overlay.png` | Duck with decorative rubber-duck skin. Not checked. | kapla-demo/duck200-v3/overlay/shots/duck.png | 1280x720 | 124 KB |
 | `renders/duck/duck-200-mathematician-view.png` | Duck in the Mathematician inspector view. | kapla-demo/inspectors/duck/shots/math.png | 1600x1000 | 217 KB |
-| `diagrams/how-it-works-v2.png` | How-it-works diagram: Ask, Propose, Prove (Lean checks), Build; fail loop back to the AI. | /workspace/v90/how-it-works-v2.png (rendered from v90/flow2.html) | 1600x900 | 216 KB |
-| `presentation/inspector-hub.png` | Screenshot of the local inspector hub (four builds, verdicts, Lean proof list below the fold). | kapla-demo/inspectors/_ev/hub.png | 1600x1100 | 180 KB |
+| `diagrams/how-it-works-v2.png` | How-it-works diagram: Ask, Propose, Prove (Lean checks), Build; fail loop back to the AI. Footer marks Brandenburg as planned positions only, not 3.9 mm. | /workspace/v90/how-it-works-v2.png (rendered from v90/flow2.html; footer corrected Nov 2) | 1600x900 | 219 KB |
+| `presentation/inspector-hub.png` | Screenshot of the local inspector hub (four builds and their verdicts). | kapla-demo/inspectors/_ev/hub.png (Transamerica card label corrected Nov 2) | 1600x1100 | 179 KB |
 | `gear/defy-gravity-front-print.png` | Team shirt front, print-ready (300 dpi). | /workspace/tees/defy_gravity_FRONT_print.png (how it was made is not recorded on the box) | 3600x4800 | 13.5 MB |
 | `gear/vibe-verified-back-print.png` | Team shirt back, "Vibe Verified" paisley, print-ready (300 dpi). Final (v4). | /workspace/tees/vibe_verified_BACK_print_v4.png (how it was made is not recorded on the box) | 3600x4800 | 20.7 MB |
 | `gear/defy-gravity-front-preview.png` | Small preview of the shirt front. | KaplaBuilder branch gear/defy-gravity, assets/gear/ | 900x1200 | 1.5 MB |
@@ -69,6 +69,15 @@ contact-sheet.png, MANIFEST.sha256
 | `evidence/checker-commit.txt` | DefyGravity commit the checker was built from for the saved outputs (fdb157d). | kapla-demo/inspectors/_ev/commit.txt | text | 41 B |
 | `contact-sheet.png` | Contact sheet of every image plus one frame per video, labeled, for quick review. The bottom band adds the 7 Atelier and Perplexity images. | generated here (PIL + ffmpeg) | 2096x2492 | 1.6 MB |
 Overlay videos were made by replaying the plank plan in Three.js, capturing frames with headless Playwright and encoding with ffmpeg. Their music is synthesized in code (numpy), not a licensed track.
+
+## Corrections (Nov 2 2026)
+
+Four files were re-rendered from their own sources so their captions match the saved checker output. Nothing else in them changed.
+
+- `video/defy-gravity-90s-v2.mp4`: the Brandenburg segment follows the "Designed by AI. Proven in Lean." title card. Its caption changed from "Brandenburg Gate" to "Brandenburg Gate · 94 planks, stands at planned positions only", in the same style as the Golden Gate caption ("200 planks, stable to 3.9 mm"). Brandenburg passes the checker after every block at its planned positions; the 3.9 mm result does not cover it. The other five segments are byte-identical to before.
+- `diagrams/how-it-works-v2.png`: footer changed from "Brandenburg · Golden Gate · Transamerica · Duck" to "Brandenburg (planned positions only, not 3.9 mm) · Golden Gate · Transamerica · Duck", so the 3.9 mm line on the Prove card no longer reads as covering Brandenburg.
+- `presentation/inspector-hub.png`: the Transamerica card note changed from "Astra build evidence (commit 63835a9 per earlier run)" to "Build evidence (commit 63835a9 per earlier run)".
+- `contact-sheet.png`: the two thumbnails for the diagram and the inspector hub were regenerated from the corrected files.
 
 ## Kapla Atelier
 
