@@ -27,7 +27,10 @@
     "KaplaPhysics.checkTPushes_sound",
     "KaplaPhysics.checkTurnedPlan_sound",
     "KaplaPhysics.stable_iff_tStable",
-    "KaplaPhysics.turnedOf_shape"
+    "KaplaPhysics.turnedOf_shape",
+    "KaplaPhysics.checkRule_iff",
+    "KaplaPhysics.ruleHolds_take",
+    "KaplaPhysics.coreCheckWith_ok_sound"
   ],
   "permitted_axioms": [
     "propext",

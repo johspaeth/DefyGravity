@@ -9,6 +9,7 @@ import KaplaPhysics.ColumnProofs
 import KaplaPhysics.TowerProofs
 import KaplaPhysics.Engine
 import KaplaPhysics.CoreAdapter
+import KaplaPhysics.UserRules
 import KaplaPhysics.Proofs
 import KaplaPhysics.Examples
 

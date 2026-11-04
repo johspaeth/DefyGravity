@@ -2,6 +2,7 @@ import KaplaCore.Basic
 import KaplaCore.Bubble
 import KaplaCore.Block
 import KaplaCore.Plan
+import KaplaCore.Rules
 import KaplaCore.Target
 import KaplaCore.Report
 import KaplaCore.Engine

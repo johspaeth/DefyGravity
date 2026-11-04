@@ -4,6 +4,7 @@ import KaplaPhysics.RobustProofs
 import KaplaPhysics.ColumnProofs
 import KaplaPhysics.TowerProofs
 import KaplaPhysics.CoreAdapter
+import KaplaPhysics.UserRules
 
 /-! # Proofs of the physics theorems
 
@@ -822,5 +823,129 @@ theorem turnedOf_shape (p : KaplaCore.Pose) (t : TPlank) (h : turnedOf p = some 
         rw [e1, e2]
         exact ⟨h1, h2, h3, h4⟩
   · simp at h
+
+/-! ## A person's own rules (`UserRules.lean`) -/
+
+
+/-- Every corner of a block is at most as high as its top, and some corner is at its top. -/
+theorem corners_z (p : KaplaCore.Pose) :
+    (∀ c ∈ p.corners, c.z ≤ poseTop p) ∧ ∃ c ∈ p.corners, c.z = poseTop p := by
+  have hd : 0 < p.up.dims.z := by
+    cases p.up <;> simp [KaplaCore.Upright.dims, KaplaCore.blockLength, KaplaCore.blockWidth,
+      KaplaCore.blockThickness] <;> decide
+  simp only [KaplaCore.Pose.corners, List.mem_flatMap, List.mem_map, List.mem_cons,
+    List.not_mem_nil, or_false, poseTop]
+  constructor
+  · rintro c ⟨sx, -, sy, -, sz, hsz, rfl⟩
+    simp only [KaplaCore.Q3.add, KaplaCore.Rot.apply]
+    rcases hsz with rfl | rfl <;> grind
+  · refine ⟨_, ⟨1, by simp, 1, by simp, 1, by simp, rfl⟩, ?_⟩
+    simp only [KaplaCore.Q3.add, KaplaCore.Rot.apply]
+    grind
+
+theorem largest_spec (f : KaplaCore.Q3 → Rat) (a : Rat) (cs : List KaplaCore.Q3) :
+    (a ≤ largest f a cs ∧ ∀ c ∈ cs, f c ≤ largest f a cs) ∧
+      (largest f a cs = a ∨ ∃ c ∈ cs, largest f a cs = f c) := by
+  induction cs generalizing a with
+  | nil => simp [largest]
+  | cons c cs ih =>
+    obtain ⟨⟨h1, h2⟩, h3⟩ := ih (if a ≤ f c then f c else a)
+    simp only [largest, List.mem_cons, forall_eq_or_imp, exists_eq_or_imp]
+    refine ⟨⟨?_, ?_, h2⟩, ?_⟩
+    · split at h1 <;> grind
+    · split at h1 <;> grind
+    · split at h3 <;> grind
+
+theorem smallest_spec (f : KaplaCore.Q3 → Rat) (a : Rat) (cs : List KaplaCore.Q3) :
+    (smallest f a cs ≤ a ∧ ∀ c ∈ cs, smallest f a cs ≤ f c) ∧
+      (smallest f a cs = a ∨ ∃ c ∈ cs, smallest f a cs = f c) := by
+  induction cs generalizing a with
+  | nil => simp [smallest]
+  | cons c cs ih =>
+    obtain ⟨⟨h1, h2⟩, h3⟩ := ih (if f c ≤ a then f c else a)
+    simp only [smallest, List.mem_cons, forall_eq_or_imp, exists_eq_or_imp]
+    refine ⟨⟨?_, ?_, h2⟩, ?_⟩
+    · split at h1 <;> grind
+    · split at h1 <;> grind
+    · split at h3 <;> grind
+
+/-- Largest minus smallest is at most `w` exactly when any two values differ by at most `w`. -/
+theorem span_le_iff (f : KaplaCore.Q3 → Rat) (c : KaplaCore.Q3) (cs : List KaplaCore.Q3) (w : Rat) :
+    largest f (f c) cs - smallest f (f c) cs ≤ w ↔ ∀ a ∈ c :: cs, ∀ b ∈ c :: cs, f a - f b ≤ w := by
+  obtain ⟨⟨l1, l2⟩, l3⟩ := largest_spec f (f c) cs
+  obtain ⟨⟨s1, s2⟩, s3⟩ := smallest_spec f (f c) cs
+  constructor
+  · intro h a ha b hb
+    have ha' : f a ≤ largest f (f c) cs := by
+      rcases List.mem_cons.1 ha with rfl | ha
+      · exact l1
+      · exact l2 a ha
+    have hb' : smallest f (f c) cs ≤ f b := by
+      rcases List.mem_cons.1 hb with rfl | hb
+      · exact s1
+      · exact s2 b hb
+    grind
+  · intro h
+    obtain ⟨a, ha, hA⟩ : ∃ a ∈ c :: cs, largest f (f c) cs = f a := by
+      rcases l3 with h3 | ⟨a, ha, h3⟩
+      · exact ⟨c, List.mem_cons_self, h3⟩
+      · exact ⟨a, List.mem_cons_of_mem _ ha, h3⟩
+    obtain ⟨b, hb, hB⟩ : ∃ b ∈ c :: cs, smallest f (f c) cs = f b := by
+      rcases s3 with h3 | ⟨b, hb, h3⟩
+      · exact ⟨c, List.mem_cons_self, h3⟩
+      · exact ⟨b, List.mem_cons_of_mem _ hb, h3⟩
+    rw [hA, hB]; exact h a ha b hb
+
+theorem spanWithin_iff (w d : Rat) (cs : List KaplaCore.Q3) :
+    spanWithin w d cs = true ↔ ∀ a ∈ cs, ∀ b ∈ cs, a.x - b.x ≤ w ∧ a.y - b.y ≤ d := by
+  cases cs with
+  | nil => simp [spanWithin]
+  | cons c cs =>
+    simp only [spanWithin, Bool.and_eq_true, decide_eq_true_eq]
+    rw [span_le_iff (·.x) c cs w, span_le_iff (·.y) c cs d]
+    constructor
+    · rintro ⟨hx, hy⟩ a ha b hb; exact ⟨hx a ha b hb, hy a ha b hb⟩
+    · intro h; exact ⟨fun a ha b hb => (h a ha b hb).1, fun a ha b hb => (h a ha b hb).2⟩
+
+theorem checkRule_iff (r : KaplaCore.UserRule) (ps : List KaplaCore.Pose) :
+    checkRule r ps = true ↔ RuleHolds r ps := by
+  cases r with
+  | maxHeight h =>
+    simp only [checkRule, RuleHolds, List.all_eq_true, decide_eq_true_eq]
+    constructor
+    · intro hp p hmem c hc; exact Rat.le_trans ((corners_z p).1 c hc) (hp p hmem)
+    · intro hp p hmem
+      obtain ⟨c, hc, hz⟩ := (corners_z p).2
+      exact hz ▸ hp p hmem c hc
+  | noUpright u =>
+    simp only [checkRule, RuleHolds, List.all_eq_true]
+    exact forall_congr' fun p => imp_congr_right fun _ => by
+      cases p.up <;> cases u <;> decide
+  | maxUpright u n => simp [checkRule, RuleHolds, List.countP_eq_length_filter]
+  | fitsIn w d =>
+    simp only [checkRule, RuleHolds, spanWithin_iff, List.mem_flatMap]
+    constructor
+    · intro h p hp q hq c hc c' hc'; exact h c ⟨p, hp, hc⟩ c' ⟨q, hq, hc'⟩
+    · rintro h c ⟨p, hp, hc⟩ c' ⟨q, hq, hc'⟩; exact h p hp q hq c hc c' hc'
+
+theorem ruleHolds_take (r : KaplaCore.UserRule) (ps : List KaplaCore.Pose) (k : Nat)
+    (h : RuleHolds r ps) : RuleHolds r (ps.take k) := by
+  cases r with
+  | maxHeight hh => exact fun p hp => h p (List.mem_of_mem_take hp)
+  | noUpright u => exact fun p hp => h p (List.mem_of_mem_take hp)
+  | maxUpright u n =>
+    exact Nat.le_trans (((List.take_sublist k ps).filter _).length_le) h
+  | fitsIn w d =>
+    exact fun p hp q hq => h p (List.mem_of_mem_take hp) q (List.mem_of_mem_take hq)
+
+theorem coreCheckWith_ok_sound (opts : PlanOptions) (rules : List KaplaCore.UserRule)
+    (h : KaplaCore.HumanModel) (maxBlocks : Nat) (plan : KaplaCore.BuildPlan)
+    (hok : (coreCheckWith opts rules h maxBlocks plan).ok = true) :
+    (coreCheck opts h maxBlocks plan).ok = true ∧
+      (coreCheckWith opts rules h maxBlocks plan).assurance =
+        (coreCheck opts h maxBlocks plan).assurance ∧
+      KeepsRulesThroughout rules plan.blocks := by
+  simp only [coreCheckWith, Bool.and_eq_true, checkRules, List.all_eq_true] at hok
+  refine ⟨hok.1, rfl, fun k r hr => ruleHolds_take r _ k ((checkRule_iff r _).1 (hok.2 r hr))⟩
 
 end KaplaPhysics

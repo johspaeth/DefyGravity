@@ -203,15 +203,52 @@ You also choose \"height\": the scale of the target. Every bubble's centre and
 half-widths are multiplied by height, so a model whose top is at z = 1 is then
 height units tall. Choose a height that the block budget can fill well."
 
-/-- The question for round 1: the target's bubbles and the block budget. -/
-def userPrompt (m : BubbleModel) (budget : Nat) : String :=
+/-- A person's extra rule, for Claude, in block units. -/
+def ruleForClaude : UserRule → String
+  | .maxHeight h => s!"no part of any block may be higher than z = {showQ h}"
+  | .noUpright u => s!"no block may be \"{upName u}\""
+  | .maxUpright u n => s!"at most {n} blocks may be \"{upName u}\""
+  | .fitsIn w d =>
+    s!"the whole structure must fit in a rectangle {showQ w} long along x and {showQ d} long along y (measure every corner, also of turned blocks)"
+where
+  upName : Upright → String
+    | .flat => "flat"
+    | .onEdge => "edge"
+    | .standing => "upright"
+
+/-- The rules for this design where they differ from the system prompt, for Claude. Empty for
+the default rules. -/
+def rulesForClaude (r : BuildRules) : String :=
+  let d : BuildRules := {}
+  let lines :=
+    (if r.human.epsRel != d.human.epsRel then
+      [s!"Hands can place a block up to {showQ r.human.epsRel} units off in x and in y (not 0.5): keep that margin in rule 2."]
+    else []) ++
+    (if r.human.hands != d.human.hands then
+      [s!"The builder may use {r.human.hands} hands, but the engine still checks the structure after every single block."]
+    else []) ++
+    (if r.clearance then [] else
+      ["Small gaps and gaps exactly as wide as a block are allowed (rule 3 does not ask for them to be avoided)."]) ++
+    (if r.allowTurned then [] else
+      ["Use only \"turn\" 0 or 90. Any other turn is rejected."]) ++
+    r.extra.map fun x => s!"Extra rule: {ruleForClaude x}."
+  if lines.isEmpty then "" else
+    "\n\nRules the person chose for this design. They replace the rules above where they differ, " ++
+    "and an answer that breaks any of them is rejected:\n" ++ "\n".intercalate (lines.map ("- " ++ ·))
+
+#guard rulesForClaude {} == ""
+#guard ((rulesForClaude { allowTurned := false, extra := [.maxHeight 20] }).splitOn "z = 20").length == 2
+
+/-- The question for round 1: the target's bubbles, the block budget, and the rules the person
+chose (none with the default rules). -/
+def userPrompt (m : BubbleModel) (budget : Nat) (rules : BuildRules := {}) : String :=
   let line (b : Bubble) : String :=
     s!"- \"{b.label}\": centre ({showQ b.center.x}, {showQ b.center.y}, {showQ b.center.z}), " ++
     s!"half-widths ({showQ b.semi.x}, {showQ b.semi.y}, {showQ b.semi.z})"
   s!"Target \"{m.name}\", made of these bubbles (ellipsoids with axes along x, y, z,\n" ++
   "in model units, before scaling by height). Only the part above z = 0 counts:\n" ++
   "\n".intercalate (m.bubbles.map line) ++
-  s!"\nBlock budget: at most {budget} blocks."
+  s!"\nBlock budget: at most {budget} blocks." ++ rulesForClaude rules
 
 #guard
   let p := userPrompt BubbleModel.egg 20
@@ -227,12 +264,20 @@ def describe : Diagnostic → String
   | .slides s c => s!"step {s + 1}: slides at contact {c + 1}"
   | .unreachable s => s!"step {s + 1}: may be hard to reach"
   | .overlap i j => s!"blocks {i + 1} and {j + 1} overlap"
-  | .clearance i j => s!"blocks {i + 1} and {j + 1} have a small gap: a 3.9 mm error could close it"
-  | .tightSlot s => s!"step {s + 1}: the block goes into a slot exactly its own width; a 3.9 mm error could close it"
+  | .clearance i j => s!"blocks {i + 1} and {j + 1} have a small gap: a placement error could close it"
+  | .tightSlot s => s!"step {s + 1}: the block goes into a slot exactly its own width; a placement error could close it"
   | .unevenSupports b => s!"block {b + 1} rests on supports built differently"
   | .tooManyHands s => s!"step {s + 1}: more blocks than the builder has hands"
   | .emptyStep s => s!"step {s + 1}: places no block"
   | .tooManyBlocks used limit => s!"uses {used} blocks, at most {limit} allowed"
+  | .ruleBroken r s => s!"step {s + 1}: breaks extra rule {r + 1}"
+
+/-- A physics problem in words, naming the person's extra rule when one is broken. -/
+def describeIn (rules : BuildRules) : Diagnostic → String
+  | .ruleBroken r s => match rules.extra[r]? with
+    | some x => s!"step {s + 1}: breaks the extra rule \"{ruleForClaude x}\""
+    | none => describe (.ruleBroken r s)
+  | d => describe d
 
 /-- One answer and what the engines said about it. -/
 structure Design where
@@ -278,7 +323,7 @@ def judge (req : PlanRequest) (ph : Option PhysicsEngine) (sem : SemanticEngine)
             candidate := some { plan, physics, score, difficulty := .medium }
             passed := score.accepted && physics.ok
             problems := scoreProblems score ++
-              (if physics.ok then [] else physics.diagnostics.map (s!"physics: " ++ describe ·)) }
+              (if physics.ok then [] else physics.diagnostics.map (s!"physics: " ++ describeIn req.rules ·)) }
         | none =>
           { answer := text
             candidate := some { plan, physics := { ok := false }, score, difficulty := .medium }
@@ -402,7 +447,7 @@ def logRound (round : Nat) (checked : Bool) (ds : List Design) : IO Unit :=
 def aiRun (effort : Claude.Effort) (checkPhysics : Bool) (req : PlanRequest) (ph : PhysicsEngine) (sem : SemanticEngine) :
     IO (List Candidate) := do
   let phOpt := if checkPhysics then some ph else none
-  let first := userPrompt req.target.model req.blocks
+  let first := userPrompt req.target.model req.blocks req.rules
   let replies ← askAll effort (List.replicate designsPerRound first)
   let round1 := replies.map (judge req phOpt sem)
   logRound 1 checkPhysics round1
