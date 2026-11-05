@@ -769,6 +769,7 @@ structure Site where
   port : Nat
   key : Option String
   cache : ProposalCache
+  diagnostics : IO.Ref (List KaplaWeb.Diagnostics.Event)
 
 /-- Send a reply as JSON. A browser must not keep an old list of models. -/
 def sendJson (r : Reply) : ContextAsync (Response Body.Any) :=
@@ -782,31 +783,48 @@ instance : Handler Site where
       return ← sendJson (errorReply .forbidden "this request did not come from the Defy Gravity page")
     let path := (toString req.line.uri).takeWhile (· != '?') |>.toString
     let method := req.line.method
+    let operation : KaplaWeb.Diagnostics.Operation :=
+      if path == "/status" then .status else if path == "/planners" then .planners
+      else if path == "/chat" then .chat else if path == "/plan" then .plan
+      else if path == "/gallery" then (if method == .post then .save else .gallery)
+      else if path.startsWith "/gallery/" then (if method == .post then .share else .entry)
+      else .unknown
+    let started ← IO.monoMsNow
+    let logged (reply : Reply) : ContextAsync (Response Body.Any) := do
+      let elapsed ← IO.monoMsNow
+      site.diagnostics.modify fun events => KaplaWeb.Diagnostics.retain 200
+        (events ++ [{operation, status := reply.status.toCode.toNat, elapsedMs := elapsed - started}])
+      sendJson reply
     let guarded (action : IO Reply) : ContextAsync (Response Body.Any) := do
       let r ← (action.toBaseIO : BaseIO _)
       match r with
-      | .ok reply => sendJson reply
+      | .ok reply => logged reply
       | .error e =>
         IO.eprintln s!"{path}: {e}"
-        sendJson (errorReply .internalServerError s!"The server could not do this: {e}")
-    if method == .get && path == "/" then
+        logged (errorReply .internalServerError s!"The server could not do this: {e}")
+    if method == .get && path == "/diagnostics" then
+      sendJson {json := (KaplaWeb.Diagnostics.exportJson (← site.diagnostics.get)).compress}
+    else if method == .delete && path == "/diagnostics" then
+      site.diagnostics.set []
+      sendJson {json := "{}"}
+    else if method == .get && path == "/" then
       Response.ok |>.header! "Cache-Control" "no-store" |>.html KaplaWeb.sitePage
     else if method == .get && path == "/status" then
-      sendJson (getStatus site.key)
+      logged (getStatus site.key)
     else if method == .post && path == "/chat" then
       try
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
         guarded (postChat site.key body)
       catch e =>
-        sendJson (errorReply .badRequest s!"The message was not sent: could not read it: {e}")
+        logged (errorReply .badRequest s!"The message was not sent: could not read it: {e}")
     else if method == .get && path == "/planners" then
-      sendJson getPlanners
+      logged getPlanners
     else if method == .post && path == "/plan" then
       try
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
         guarded (postPlan body)
       catch e =>
-        sendJson (errorReply .badRequest s!"No proposal: could not read the request: {e}")
+        logged (errorReply .badRequest s!"No proposal: could not read the request: {e}")
     else if method == .get && path == "/gallery" then
       guarded getGallery
     else if method == .post && path.startsWith "/gallery/" && path.endsWith "/pr" then
@@ -818,9 +836,9 @@ instance : Handler Site where
         let body : String ← req.body.readAll (maximumSize := some maxBodyBytes)
         guarded (postEntry body)
       catch e =>
-        sendJson (errorReply .badRequest s!"Not saved: could not read the request: {e}")
+        logged (errorReply .badRequest s!"Not saved: could not read the request: {e}")
     else
-      sendJson (errorReply .notFound "no such page")
+      logged (errorReply .notFound "no such page")
 
 /-- Start the website and keep it running. -/
 def serve (port : Nat) : IO UInt32 := do
@@ -833,10 +851,11 @@ def serve (port : Nat) : IO UInt32 := do
     IO.println "No API key in .env or in ANTHROPIC_API_KEY, so the chat will not work. The rest of the site does."
   let cache ← IO.mkRef {}
   checkGallery cache
+  let diagnostics ← IO.mkRef []
   try
     Async.block do
       let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, port.toUInt16⟩
-      let server ← Server.serve addr (Site.mk port key cache)
+      let server ← Server.serve addr (Site.mk port key cache diagnostics)
       IO.println s!"Defy Gravity is running. Open http://localhost:{port}"
       (← IO.getStdout).flush
       server.waitShutdown
