@@ -1,3 +1,4 @@
+import KaplaWeb.Diagnostics
 import KaplaWeb.Basic
 import KaplaWeb.Blueprint
 import KaplaWeb.Page

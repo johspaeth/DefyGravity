@@ -95,6 +95,8 @@ jobs:
       - uses: ./.github/actions/setup-lean
       - name: make install (no build cache)
         run: time make install
+      - name: Diagnostic logs HTTP integration
+        run: python3 scripts/test_diagnostics.py
       - name: Smoke test (no API key)
         run: scripts/smoke_test.sh
 

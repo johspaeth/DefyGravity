@@ -139,3 +139,9 @@ the "Hide bubbles" button turns them off and on. Steps are shown in order; a ste
 
 `web/examples/` has a house (27 blocks), a duck (15 blocks) and a spiral tower (24 blocks,
 each turned 15° more than the one below).
+
+## Diagnostic logs
+
+Open **Diagnostic logs** in the gallery sidebar to inspect completed API operations, refresh, export JSON, or clear logs. The most recent 200 records contain only an operation category, HTTP status and elapsed milliseconds. Logs are shared by tabs using this server, live in memory and disappear on restart. They exclude prompts, request/response bodies, names, keys and raw error messages. They do not capture browser network failures or server crashes.
+
+`GET /diagnostics` returns `{schemaVersion: 1, events: [...]}`; `DELETE /diagnostics` clears the buffer. Both use the existing local host/origin check and no-store responses, and neither records itself. The [feature specification](../docs/features/diagnostic-logs/spec.md) describes proof scope and remaining review gates. After `lake build kapla`, run `python3 scripts/test_diagnostics.py` for the isolated HTTP check.

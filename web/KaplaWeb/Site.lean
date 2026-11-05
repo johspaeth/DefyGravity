@@ -42,6 +42,7 @@ button:disabled{opacity:.5;cursor:default}
 #saveName{font:inherit;flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--card);color:var(--fg)}
 #status{margin:8px 0;color:var(--muted);overflow-wrap:anywhere}
 #status.bad{color:var(--bad);font-weight:600}
+#diagnosticsPanel{margin-top:16px;padding:10px;border:1px solid var(--line);border-radius:10px}#diagnosticsPanel pre{white-space:pre-wrap;max-height:260px;overflow:auto;font-size:.8rem}#diagnosticsPanel p{font-size:.85rem;color:var(--muted)}
 #ask{margin:8px 0}#ask div{display:flex;gap:6px;margin-top:6px}
 "
 
@@ -71,6 +72,31 @@ def siteJs : String := "
   const send = async (path, options) => { const r = await fetch(path, options);
     let body = {}; try { body = await r.json(); } catch (_) {}
     return {status: r.status, ok: r.ok, body}; };
+
+  const diagnosticsOutput = get('diagnosticsOutput'), diagnosticsStatus = get('diagnosticsStatus');
+  const refreshDiagnostics = async () => {
+    diagnosticsStatus.textContent = 'Loading…';
+    try {
+      const r = await send('/diagnostics');
+      if (!r.ok) throw new Error();
+      diagnosticsOutput.textContent = r.body.events.length ? r.body.events.map((e, i) =>
+        `${i + 1}. ${e.operation} · HTTP ${e.status} · ${e.elapsedMs} ms`).join('\\n') : 'No requests recorded yet.';
+      diagnosticsStatus.textContent = `${r.body.events.length} of at most 200 requests. Oldest first.`;
+      return r.body;
+    } catch (_) { diagnosticsStatus.textContent = 'Cannot load diagnostic logs. Check that the server is running.'; return null; }
+  };
+  get('diagnosticsPanel').ontoggle = () => { if (get('diagnosticsPanel').open) refreshDiagnostics(); };
+  get('diagnosticsRefresh').onclick = refreshDiagnostics;
+  get('diagnosticsClear').onclick = async () => {
+    try { const r = await send('/diagnostics', {method:'DELETE'}); if (!r.ok) throw new Error(); await refreshDiagnostics(); }
+    catch (_) { diagnosticsStatus.textContent = 'Could not clear diagnostic logs.'; }
+  };
+  get('diagnosticsExport').onclick = async () => {
+    const data = await refreshDiagnostics(); if (!data) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
+    const a = document.createElement('a'); a.href = url; a.download = 'defy-gravity-diagnostics.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   const setOpen = (name, model) => { openName = name; current = model; saveButton.disabled = !model; generate.disabled = busy || !model;
     prButton.disabled = busy || !name;
     list.querySelectorAll('button').forEach(b => b.classList.toggle('open', b.textContent === name)); };
@@ -211,6 +237,12 @@ def sitePage : String :=
 <button id=\"prButton\" type=\"button\" disabled title=\"Open a PR that adds the open gallery entry to the repo\">Open a PR to share it</button>
 <div id=\"ask\" role=\"alertdialog\" hidden><span id=\"askText\"></span><div><button id=\"askYes\" type=\"button\">Replace</button><button id=\"askNo\" type=\"button\">Cancel</button></div></div>
 <div id=\"status\" role=\"status\"></div>
+<details id=\"diagnosticsPanel\"><summary>Diagnostic logs</summary>
+<p>Troubleshoot this server session. Records operation, HTTP status and duration. No prompts, model names, request bodies, credentials or error text. Shared by tabs; cleared on restart.</p>
+<button id=\"diagnosticsRefresh\" type=\"button\">Refresh</button>
+<button id=\"diagnosticsExport\" type=\"button\">Export JSON</button>
+<button id=\"diagnosticsClear\" type=\"button\">Clear logs</button>
+<p id=\"diagnosticsStatus\" role=\"status\"></p><pre id=\"diagnosticsOutput\" tabindex=\"0\" aria-label=\"Diagnostic request history\"></pre></details>
 </aside>
 <section id=\"chat\">
 <h2>Chat with Claude</h2>

@@ -1,0 +1,15 @@
+{
+  "challenge_module": "KaplaSpecs.Diagnostics",
+  "solution_module": "KaplaWeb.Diagnostics",
+  "theorem_names": [
+    "KaplaWeb.Diagnostics.event_schema",
+    "KaplaWeb.Diagnostics.retain_bounded",
+    "KaplaWeb.Diagnostics.retain_latest",
+    "KaplaWeb.Diagnostics.operation_allowlist"
+  ],
+  "permitted_axioms": [
+    "propext",
+    "Quot.sound",
+    "Classical.choice"
+  ]
+}
